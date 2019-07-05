@@ -98,6 +98,7 @@ public class PentahoOrcRecordWriter implements IPentahoOutputFormat.IPentahoReco
 
     try {
       S3NCredentialUtils.applyS3CredentialsToHadoopConfigurationIfNecessary( filePath, conf );
+      org.pentaho.hadoop.shim.common.DataMaskingHadoopProxyUtils.loginKerberos(filePath, conf);
       Path outputFile = new Path( S3NCredentialUtils.scrubFilePathIfNecessary( filePath ) );
       writer = OrcFile.createWriter( outputFile,
         OrcFile.writerOptions( conf )

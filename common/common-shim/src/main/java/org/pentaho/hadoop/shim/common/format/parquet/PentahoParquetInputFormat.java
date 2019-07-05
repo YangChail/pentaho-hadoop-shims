@@ -97,6 +97,7 @@ public class PentahoParquetInputFormat extends HadoopFormatBase implements IPent
   public void setInputFile( String file ) throws Exception {
     inClassloader( () -> {
       S3NCredentialUtils.applyS3CredentialsToHadoopConfigurationIfNecessary( file, job.getConfiguration() );
+      org.pentaho.hadoop.shim.common.DataMaskingHadoopProxyUtils.loginKerberos(file, job.getConfiguration());
       Path filePath = new Path( S3NCredentialUtils.scrubFilePathIfNecessary( file ) );
       FileSystem fs = FileSystem.get( filePath.toUri(), job.getConfiguration() );
       if ( !fs.exists( filePath ) ) {
@@ -164,6 +165,7 @@ public class PentahoParquetInputFormat extends HadoopFormatBase implements IPent
     return inClassloader( () -> {
       ConfigurationProxy conf = new ConfigurationProxy();
       S3NCredentialUtils.applyS3CredentialsToHadoopConfigurationIfNecessary( file, conf );
+      org.pentaho.hadoop.shim.common.DataMaskingHadoopProxyUtils.loginKerberos(file, conf);
       Path filePath = new Path( S3NCredentialUtils.scrubFilePathIfNecessary( file ) );
       FileSystem fs = FileSystem.get( filePath.toUri(), conf );
       FileStatus fileStatus = fs.getFileStatus( filePath );

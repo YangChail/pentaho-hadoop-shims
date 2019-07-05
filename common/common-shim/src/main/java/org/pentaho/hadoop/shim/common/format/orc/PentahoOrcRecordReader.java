@@ -70,6 +70,7 @@ public class PentahoOrcRecordReader implements IPentahoOrcInputFormat.IPentahoRe
     Reader reader = null;
     try {
       S3NCredentialUtils.applyS3CredentialsToHadoopConfigurationIfNecessary( fileName, conf );
+      org.pentaho.hadoop.shim.common.DataMaskingHadoopProxyUtils.loginKerberos(fileName, conf);
       filePath = new Path( S3NCredentialUtils.scrubFilePathIfNecessary( fileName ) );
       fs = FileSystem.get( filePath.toUri(), conf );
       if ( !fs.exists( filePath ) ) {

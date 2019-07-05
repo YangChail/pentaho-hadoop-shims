@@ -106,9 +106,12 @@ public class OrcConverter {
     return rowMetaAndData;
   }
 
-  protected static Object convertFromSourceToTargetDataType( ColumnVector columnVector, int currentBatchRow,
+  protected static Object convertFromSourceToTargetDataType( ColumnVector columnVector, int currentBatchRowOld,
                                                              int orcValueMetaInterface ) {
-
+	int currentBatchRow=currentBatchRowOld;
+	if(columnVector.isRepeating) {
+	    currentBatchRow=0;
+	}
     if ( columnVector.isNull[ currentBatchRow ] ) {
       return null;
     }
@@ -121,12 +124,18 @@ public class OrcConverter {
         } catch ( UnknownHostException e ) {
           e.printStackTrace();
         }
-
+        return null;
       case ValueMetaInterface.TYPE_STRING:
-        return new String( ( (BytesColumnVector) columnVector ).vector[ currentBatchRow ],
-          ( (BytesColumnVector) columnVector ).start[ currentBatchRow ],
-          ( (BytesColumnVector) columnVector ).length[ currentBatchRow ] );
-
+			try {
+				byte[] bytes = ((BytesColumnVector) columnVector).vector[currentBatchRow];
+				if (bytes != null) {
+					return new String(bytes, ((BytesColumnVector) columnVector).start[currentBatchRow],
+							((BytesColumnVector) columnVector).length[currentBatchRow]);
+				}
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+			return null;
       case ValueMetaInterface.TYPE_INTEGER:
         return (long) ( (LongColumnVector) columnVector ).vector[ currentBatchRow ];
 
@@ -163,7 +172,12 @@ public class OrcConverter {
     return null;
   }
 
-  public IOrcInputField getFormatField( String formatFieldName, List<? extends IOrcInputField> fields ) {
+  private static Object BytesColumnVector(ColumnVector columnVector) {
+	// TODO Auto-generated method stub
+	return null;
+}
+
+public IOrcInputField getFormatField( String formatFieldName, List<? extends IOrcInputField> fields ) {
     if ( formatFieldName == null || formatFieldName.trim().isEmpty() ) {
       return null;
     }

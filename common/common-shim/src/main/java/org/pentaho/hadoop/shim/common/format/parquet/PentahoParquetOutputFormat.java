@@ -91,6 +91,7 @@ public class PentahoParquetOutputFormat extends HadoopFormatBase implements IPen
     inClassloader( () -> {
       S3NCredentialUtils.applyS3CredentialsToHadoopConfigurationIfNecessary( file, job.getConfiguration() );
       outputFile = new Path( S3NCredentialUtils.scrubFilePathIfNecessary( file ) );
+      org.pentaho.hadoop.shim.common.DataMaskingHadoopProxyUtils.loginKerberos(file, job.getConfiguration());
       FileSystem fs = FileSystem.get( outputFile.toUri(), job.getConfiguration() );
       if ( fs.exists( outputFile ) ) {
         if ( override ) {

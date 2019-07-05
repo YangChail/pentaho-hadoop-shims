@@ -108,6 +108,7 @@ public class PentahoOrcInputFormat extends HadoopFormatBase implements IPentahoO
       try {
         S3NCredentialUtils.applyS3CredentialsToHadoopConfigurationIfNecessary( fileName, conf );
         filePath = new Path( fileName );
+        org.pentaho.hadoop.shim.common.DataMaskingHadoopProxyUtils.loginKerberos(fileName, conf);
         fs = FileSystem.get( filePath.toUri(), conf );
         if ( !fs.exists( filePath ) ) {
           throw new NoSuchFileException( fileName );

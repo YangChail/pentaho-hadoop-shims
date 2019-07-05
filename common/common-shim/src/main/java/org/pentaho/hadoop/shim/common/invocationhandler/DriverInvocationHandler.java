@@ -70,6 +70,7 @@ public class DriverInvocationHandler implements InvocationHandler {
   public Object invoke( final Object proxy, Method method, Object[] args ) throws Throwable {
 
     try {
+      org.pentaho.hadoop.shim.common.DataMaskingHadoopProxyUtils.hiveKerberosAuthLogin(method, args);
       Object o = method.invoke( driver, args );
       if ( o instanceof Connection ) {
         // Intercept the Connection object so we can proxy that too

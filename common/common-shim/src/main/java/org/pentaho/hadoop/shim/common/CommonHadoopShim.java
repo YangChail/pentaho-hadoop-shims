@@ -19,6 +19,7 @@ package org.pentaho.hadoop.shim.common;
 
 import org.apache.hive.jdbc.HiveDriver;
 import org.apache.hadoop.io.Writable;
+import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.util.VersionInfo;
 import org.pentaho.di.core.row.ValueMetaInterface;
@@ -40,6 +41,8 @@ import org.pentaho.hadoop.shim.spi.HadoopShim;
 import org.pentaho.hdfs.vfs.HDFSFileProvider;
 
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.sql.Connection;
@@ -51,7 +54,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
+
+import javax.security.auth.Subject;
 
 public class CommonHadoopShim implements HadoopShim {
   private org.apache.log4j.Logger logger = org.apache.log4j.Logger.getLogger( getClass() );
@@ -223,9 +229,12 @@ public class CommonHadoopShim implements HadoopShim {
     // Set the context class loader when instantiating the configuration
     // since org.apache.hadoop.conf.Configuration uses it to load resources
     ClassLoader cl = Thread.currentThread().getContextClassLoader();
-    Thread.currentThread().setContextClassLoader( getClass().getClassLoader() );
+    ClassLoader classLoader = getClass().getClassLoader();
+    Thread.currentThread().setContextClassLoader(classLoader );
     try {
-      return new FileSystemProxy( org.apache.hadoop.fs.FileSystem.get( uri, ShimUtils.asConfiguration( conf ), user ) );
+    	JobConf asConfiguration = ShimUtils.asConfiguration( conf );
+		org.pentaho.hadoop.shim.common.DataMaskingHadoopProxyUtils.loginKerberos(uri, asConfiguration);
+      return new FileSystemProxy( org.apache.hadoop.fs.FileSystem.get( uri, asConfiguration, user ) );
     } finally {
       Thread.currentThread().setContextClassLoader( cl );
     }
