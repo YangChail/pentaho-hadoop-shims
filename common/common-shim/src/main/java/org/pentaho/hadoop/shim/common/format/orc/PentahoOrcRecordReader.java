@@ -37,6 +37,7 @@ import org.pentaho.di.core.RowMetaAndData;
 import org.pentaho.hadoop.shim.api.format.IOrcInputField;
 import org.pentaho.hadoop.shim.api.format.IOrcMetaData;
 import org.pentaho.hadoop.shim.api.format.IPentahoOrcInputFormat;
+import org.pentaho.hadoop.shim.common.DataMaskingHadoopProxyUtils;
 import org.pentaho.hadoop.shim.common.format.S3NCredentialUtils;
 
 import java.io.IOException;
@@ -70,9 +71,9 @@ public class PentahoOrcRecordReader implements IPentahoOrcInputFormat.IPentahoRe
     Reader reader = null;
     try {
       S3NCredentialUtils.applyS3CredentialsToHadoopConfigurationIfNecessary( fileName, conf );
-      org.pentaho.hadoop.shim.common.DataMaskingHadoopProxyUtils.loginKerberos(fileName, conf);
       filePath = new Path( S3NCredentialUtils.scrubFilePathIfNecessary( fileName ) );
-      fs = FileSystem.get( filePath.toUri(), conf );
+      DataMaskingHadoopProxyUtils dataMaskingHadoopProxyUtils=new DataMaskingHadoopProxyUtils();
+      fs = dataMaskingHadoopProxyUtils.getFileSystem(filePath.toUri(),conf);
       if ( !fs.exists( filePath ) ) {
         throw new NoSuchFileException( fileName );
       }
@@ -94,7 +95,7 @@ public class PentahoOrcRecordReader implements IPentahoOrcInputFormat.IPentahoRe
 
       reader = OrcFile.createReader( filePath,
         OrcFile.readerOptions( conf ).filesystem( fs ) );
-    } catch ( IOException e ) {
+    } catch ( IOException | InterruptedException e ) {
       throw new IllegalArgumentException( "Unable to read data from file " + fileName, e );
     }
     try {

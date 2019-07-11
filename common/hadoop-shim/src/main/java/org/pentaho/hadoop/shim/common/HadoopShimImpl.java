@@ -58,10 +58,16 @@ public class HadoopShimImpl extends CommonHadoopShim {
         String classpath = conf.get( "mapred.job.classpath.files" );
         conf.set( "mapred.job.classpath.files",
           classpath == null ? file.toString() : classpath + getClusterPathSeparator() + file.toString() );
-        FileSystem fs = FileSystem.get( file.toUri(), conf );
-        URI uri = fs.makeQualified( file ).toUri();
-
-        DistributedCache.addCacheFile( uri, conf );
+        DataMaskingHadoopProxyUtils dataMaskingHadoopProxyUtils=new DataMaskingHadoopProxyUtils();
+        FileSystem fs;
+		try {
+			fs = dataMaskingHadoopProxyUtils.getFileSystem( file.toUri(), conf);
+			URI uri = fs.makeQualified( file ).toUri();
+	        DistributedCache.addCacheFile( uri, conf );
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		}
+        
       }
 
       public String getClusterPathSeparator() {
@@ -99,6 +105,8 @@ public class HadoopShimImpl extends CommonHadoopShim {
       Thread.currentThread().setContextClassLoader( cl );
     }
   }
+  
+  
 
   @Override
   public void configureConnectionInformation( String namenodeHost, String namenodePort, String jobtrackerHost,

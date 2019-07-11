@@ -55,6 +55,7 @@ import org.pentaho.di.core.row.value.ValueMetaString;
 import org.pentaho.di.core.row.value.ValueMetaTimestamp;
 import org.pentaho.hadoop.shim.api.format.IOrcOutputField;
 import org.pentaho.hadoop.shim.api.format.IPentahoOutputFormat;
+import org.pentaho.hadoop.shim.common.DataMaskingHadoopProxyUtils;
 import org.pentaho.hadoop.shim.common.format.S3NCredentialUtils;
 
 import java.io.IOException;
@@ -98,13 +99,14 @@ public class PentahoOrcRecordWriter implements IPentahoOutputFormat.IPentahoReco
 
     try {
       S3NCredentialUtils.applyS3CredentialsToHadoopConfigurationIfNecessary( filePath, conf );
-      org.pentaho.hadoop.shim.common.DataMaskingHadoopProxyUtils.loginKerberos(filePath, conf);
+      DataMaskingHadoopProxyUtils dataMaskingHadoopProxyUtils=new DataMaskingHadoopProxyUtils();
+      dataMaskingHadoopProxyUtils.getFileSystem(filePath,conf);
       Path outputFile = new Path( S3NCredentialUtils.scrubFilePathIfNecessary( filePath ) );
       writer = OrcFile.createWriter( outputFile,
         OrcFile.writerOptions( conf )
           .setSchema( schema ) );
       batch = schema.createRowBatch();
-    } catch ( IOException e ) {
+    } catch ( IOException | InterruptedException e ) {
       logger.error( e );
     }
 

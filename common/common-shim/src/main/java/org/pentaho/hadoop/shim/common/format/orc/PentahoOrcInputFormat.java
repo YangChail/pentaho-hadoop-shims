@@ -33,6 +33,7 @@ import org.pentaho.hadoop.shim.api.format.IOrcInputField;
 import org.pentaho.hadoop.shim.api.format.IOrcMetaData;
 import org.pentaho.hadoop.shim.api.format.IPentahoOrcInputFormat;
 import org.pentaho.hadoop.shim.common.ConfigurationProxy;
+import org.pentaho.hadoop.shim.common.DataMaskingHadoopProxyUtils;
 import org.pentaho.hadoop.shim.common.format.HadoopFormatBase;
 import org.pentaho.hadoop.shim.common.format.S3NCredentialUtils;
 
@@ -108,8 +109,9 @@ public class PentahoOrcInputFormat extends HadoopFormatBase implements IPentahoO
       try {
         S3NCredentialUtils.applyS3CredentialsToHadoopConfigurationIfNecessary( fileName, conf );
         filePath = new Path( fileName );
-        org.pentaho.hadoop.shim.common.DataMaskingHadoopProxyUtils.loginKerberos(fileName, conf);
         fs = FileSystem.get( filePath.toUri(), conf );
+        DataMaskingHadoopProxyUtils dataMaskingHadoopProxyUtils=new DataMaskingHadoopProxyUtils();
+         fs = dataMaskingHadoopProxyUtils.getFileSystem( filePath.toUri(), conf );
         if ( !fs.exists( filePath ) ) {
           throw new NoSuchFileException( fileName );
         }

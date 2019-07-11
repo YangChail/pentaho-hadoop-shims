@@ -4,10 +4,14 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import javax.security.auth.Subject;
 import javax.security.auth.login.AppConfigurationEntry;
 import javax.security.auth.login.AppConfigurationEntry.LoginModuleControlFlag;
+
+import org.apache.hadoop.security.UserGroupInformation;
+
 import javax.security.auth.login.LoginContext;
 import javax.security.auth.login.LoginException;
 
@@ -18,9 +22,9 @@ import javax.security.auth.login.LoginException;
  *
  */
 public class DataMaskingHadoopProxyUtilsParent {
-	private static final String PRINCIPAL="principal";
-	private static final String KEYTAB="keytab";
-	private static final String CONF="conf";
+	public static final String PRINCIPAL="principal";
+	public static final String KEYTAB="keytab";
+	public static final String CONF="conf";
 	
 	
 	private static final Map<String, String> LOGIN_CONFIG_OPTS_KERBEROS_KEYTAB = createLoginConfigOptsKerberosKeytabMap();
@@ -36,11 +40,13 @@ public class DataMaskingHadoopProxyUtilsParent {
 	 * @throws LoginException
 	 * @throws IOException
 	 */
-	public static Subject getloginSubject(Map<String,String> config) throws Exception {
+	public static void getloginSubject(Map<String,String> config) throws Exception {
 		if(config!=null&&config.containsKey(PRINCIPAL)&&config.containsKey(KEYTAB)&&config.containsKey(CONF)) {
-			return getloginSubject(config.get(PRINCIPAL),config.get(KEYTAB),config.get(CONF));
+			 getloginSubject(config.get(PRINCIPAL),config.get(KEYTAB),config.get(CONF));
+		}else {
+			throw new Exception("config error");
 		}
-		throw new Exception("config error");
+		
 	}
 	
 	
@@ -55,16 +61,11 @@ public class DataMaskingHadoopProxyUtilsParent {
 	 * @throws LoginException
 	 * @throws IOException
 	 */
-	public static Subject getloginSubject(String user, String keytab, String confStr) throws Exception {
-		try {
-			System.setProperty("java.security.krb5.conf", confStr);
-			LoginContext loginContextFromKeytab = getLoginContextFromKeytab(user, keytab);
-			loginContextFromKeytab.login();
-			Subject subject = loginContextFromKeytab.getSubject();
-			return subject;
-		} catch (LoginException e) {
-			throw e;
-		}
+	public static  void getloginSubject(String user, String keytab, String confStr) throws Exception {
+		System.setProperty("java.security.krb5.conf", confStr);
+		UserGroupInformation loginUserFromKeytabAndReturnUGI = UserGroupInformation
+				.loginUserFromKeytabAndReturnUGI(user, keytab);
+
 	}
 
 	/**
@@ -94,7 +95,7 @@ public class DataMaskingHadoopProxyUtilsParent {
 	 * @return
 	 */
 	private static Map<String, String> createLoginConfigOptsKerberosKeytabMap() {
-		Map<String, String> result = new HashMap<String, String>();
+		Map<String, String> result = new ConcurrentHashMap<String, String>();
 		if (Boolean.parseBoolean(System.getenv("PENTAHO_JAAS_DEBUG"))) {
 			result.put("debug", Boolean.TRUE.toString());
 		}

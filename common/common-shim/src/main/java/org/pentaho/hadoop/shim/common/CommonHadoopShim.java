@@ -21,6 +21,7 @@ import org.apache.hive.jdbc.HiveDriver;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.net.NetUtils;
+import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.util.VersionInfo;
 import org.pentaho.di.core.row.ValueMetaInterface;
 import org.pentaho.di.i18n.BaseMessages;
@@ -233,8 +234,9 @@ public class CommonHadoopShim implements HadoopShim {
     Thread.currentThread().setContextClassLoader(classLoader );
     try {
     	JobConf asConfiguration = ShimUtils.asConfiguration( conf );
-		org.pentaho.hadoop.shim.common.DataMaskingHadoopProxyUtils.loginKerberos(uri, asConfiguration);
-      return new FileSystemProxy( org.apache.hadoop.fs.FileSystem.get( uri, asConfiguration, user ) );
+    	DataMaskingHadoopProxyUtils dataMaskingHadoopProxyUtils=new DataMaskingHadoopProxyUtils();
+    	org.apache.hadoop.fs.FileSystem fileSystem = dataMaskingHadoopProxyUtils.getFileSystem(uri, asConfiguration);
+      return new FileSystemProxy( fileSystem );
     } finally {
       Thread.currentThread().setContextClassLoader( cl );
     }

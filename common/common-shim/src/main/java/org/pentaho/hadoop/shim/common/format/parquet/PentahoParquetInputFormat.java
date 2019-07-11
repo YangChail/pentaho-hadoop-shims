@@ -56,6 +56,7 @@ import org.pentaho.di.core.RowMetaAndData;
 import org.pentaho.hadoop.shim.api.format.IParquetInputField;
 import org.pentaho.hadoop.shim.api.format.IPentahoParquetInputFormat;
 import org.pentaho.hadoop.shim.common.ConfigurationProxy;
+import org.pentaho.hadoop.shim.common.DataMaskingHadoopProxyUtils;
 import org.pentaho.hadoop.shim.common.format.HadoopFormatBase;
 import org.pentaho.hadoop.shim.common.format.ReadFileFilter;
 import org.pentaho.hadoop.shim.common.format.S3NCredentialUtils;
@@ -69,13 +70,13 @@ public class PentahoParquetInputFormat extends HadoopFormatBase implements IPent
 
   private ParquetInputFormat<RowMetaAndData> nativeParquetInputFormat;
   private Job job;
-
+  private DataMaskingHadoopProxyUtils dataMaskingHadoopProxyUtils;
   public PentahoParquetInputFormat() throws Exception {
     logger.info( "We are initializing parquet input format" );
 
     inClassloader( () -> {
       ConfigurationProxy conf = new ConfigurationProxy();
-
+      dataMaskingHadoopProxyUtils=new DataMaskingHadoopProxyUtils();
       job = Job.getInstance( conf );
 
       nativeParquetInputFormat = new ParquetInputFormat<>();
@@ -97,9 +98,8 @@ public class PentahoParquetInputFormat extends HadoopFormatBase implements IPent
   public void setInputFile( String file ) throws Exception {
     inClassloader( () -> {
       S3NCredentialUtils.applyS3CredentialsToHadoopConfigurationIfNecessary( file, job.getConfiguration() );
-      org.pentaho.hadoop.shim.common.DataMaskingHadoopProxyUtils.loginKerberos(file, job.getConfiguration());
       Path filePath = new Path( S3NCredentialUtils.scrubFilePathIfNecessary( file ) );
-      FileSystem fs = FileSystem.get( filePath.toUri(), job.getConfiguration() );
+      org.apache.hadoop.fs.FileSystem fs = dataMaskingHadoopProxyUtils.getFileSystem(filePath.toUri(),job.getConfiguration());
       if ( !fs.exists( filePath ) ) {
         throw new NoSuchFileException( file );
       }
@@ -165,9 +165,9 @@ public class PentahoParquetInputFormat extends HadoopFormatBase implements IPent
     return inClassloader( () -> {
       ConfigurationProxy conf = new ConfigurationProxy();
       S3NCredentialUtils.applyS3CredentialsToHadoopConfigurationIfNecessary( file, conf );
-      org.pentaho.hadoop.shim.common.DataMaskingHadoopProxyUtils.loginKerberos(file, conf);
       Path filePath = new Path( S3NCredentialUtils.scrubFilePathIfNecessary( file ) );
-      FileSystem fs = FileSystem.get( filePath.toUri(), conf );
+      DataMaskingHadoopProxyUtils dataMaskingHadoopProxyUtils=new DataMaskingHadoopProxyUtils();
+      org.apache.hadoop.fs.FileSystem fs = dataMaskingHadoopProxyUtils.getFileSystem(filePath.toUri(),job.getConfiguration());
       FileStatus fileStatus = fs.getFileStatus( filePath );
       List<Footer> footers = ParquetFileReader.readFooters( conf, fileStatus, true );
       if ( footers.isEmpty() ) {
