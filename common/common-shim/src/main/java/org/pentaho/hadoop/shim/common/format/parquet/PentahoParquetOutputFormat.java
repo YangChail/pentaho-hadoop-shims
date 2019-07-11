@@ -24,9 +24,11 @@ package org.pentaho.hadoop.shim.common.format.parquet;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.FileAlreadyExistsException;
+import java.security.PrivilegedAction;
 import java.security.PrivilegedExceptionAction;
 import java.util.List;
 
+import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.mapreduce.Job;
@@ -39,6 +41,8 @@ import org.apache.log4j.Logger;
 
 //#if shim_type=="HDP" || shim_type=="EMR" || shim_type=="HDI" || shim_name=="mapr60"
 import org.apache.parquet.column.ParquetProperties;
+import org.apache.parquet.hadoop.Footer;
+import org.apache.parquet.hadoop.ParquetFileReader;
 import org.apache.parquet.hadoop.ParquetOutputFormat;
 import org.apache.parquet.hadoop.ParquetRecordWriter;
 import org.apache.parquet.hadoop.metadata.CompressionCodecName;
@@ -71,14 +75,12 @@ public class PentahoParquetOutputFormat extends HadoopFormatBase implements IPen
 	private Job job;
 	private Path outputFile;
 	private List<? extends IParquetOutputField> outputFields;
-	private DataMaskingHadoopProxyUtils dataMaskingHadoopProxyUtils;
 
 	public PentahoParquetOutputFormat() throws Exception {
 		logger.info("We are initializing parquet output format");
 
 		inClassloader(() -> {
 			ConfigurationProxy conf = new ConfigurationProxy();
-			dataMaskingHadoopProxyUtils=new DataMaskingHadoopProxyUtils();
 			job = Job.getInstance(conf);
 			job.getConfiguration().set(ParquetOutputFormat.ENABLE_JOB_SUMMARY, "false");
 			ParquetOutputFormat.setEnableDictionary(job, false);
@@ -95,14 +97,35 @@ public class PentahoParquetOutputFormat extends HadoopFormatBase implements IPen
 		inClassloader(() -> {
 			S3NCredentialUtils.applyS3CredentialsToHadoopConfigurationIfNecessary(file, job.getConfiguration());
 			outputFile = new Path(S3NCredentialUtils.scrubFilePathIfNecessary(file));
-			org.apache.hadoop.fs.FileSystem fs = dataMaskingHadoopProxyUtils.getFileSystem(file,job.getConfiguration());
-			if (fs.exists(outputFile)) {
-				if (override) {
-					fs.delete(outputFile, true);
-				} else {
-					throw new FileAlreadyExistsException(file);
+			DataMaskingHadoopProxyUtils dataMaskingHadoopProxyUtils = new DataMaskingHadoopProxyUtils();
+			System.out.println("out---"+UserGroupInformation.getCurrentUser());
+			UserGroupInformation ugi = dataMaskingHadoopProxyUtils.loginCheckAndAddConfigReturnUGI(outputFile.toUri(),
+					job.getConfiguration());
+			ugi.doAs(new PrivilegedAction<FileSystem>() {
+				@Override
+				public FileSystem run() {
+					FileSystem fs = null;
+					try {
+						fs = FileSystem.get(outputFile.toUri(), job.getConfiguration());
+						System.out.println("out---"+UserGroupInformation.getCurrentUser());
+						System.out.println("out--exit-start-"+UserGroupInformation.getCurrentUser());
+						if (fs.exists(outputFile)) {
+							System.out.println("out--exit-end-"+UserGroupInformation.getCurrentUser());
+							if (override) {
+								System.out.println("out--delete-start-");
+								fs.delete(outputFile, true);
+								System.out.println("out--delete-end-");
+							}
+							System.out.println("out---finish"+UserGroupInformation.getCurrentUser());
+						}
+					} catch (IOException e) {
+						System.out.println("out--delete-error-");
+						e.printStackTrace();
+					}
+					return fs;
 				}
-			}
+			});
+			System.out.println("out---"+UserGroupInformation.getCurrentUser());
 			ParquetOutputFormat.setOutputPath(job, outputFile.getParent());
 		});
 	}
@@ -186,22 +209,30 @@ public class PentahoParquetOutputFormat extends HadoopFormatBase implements IPen
 		}
 
 		return inClassloader(() -> {
-			FixedParquetOutputFormat nativeParquetOutputFormat = new FixedParquetOutputFormat(
-					new PentahoParquetWriteSupport(outputFields));
-
-			TaskAttemptID taskAttemptID = new TaskAttemptID("qq", 111, TaskType.MAP, 11, 11);
-			TaskAttemptContextImpl task = new TaskAttemptContextImpl(job.getConfiguration(), taskAttemptID);
 			try {
-
-				ParquetRecordWriter<RowMetaAndData> recordWriter = (ParquetRecordWriter<RowMetaAndData>) nativeParquetOutputFormat
-						.getRecordWriter(task);
+				DataMaskingHadoopProxyUtils dataMaskingHadoopProxyUtils = new DataMaskingHadoopProxyUtils();
+				UserGroupInformation ugi = dataMaskingHadoopProxyUtils
+						.loginCheckAndAddConfigReturnUGI(outputFile.toUri(), job.getConfiguration());
+				TaskAttemptID taskAttemptID = new TaskAttemptID("qq", 111, TaskType.MAP, 11, 11);
+				TaskAttemptContextImpl task = new TaskAttemptContextImpl(job.getConfiguration(), taskAttemptID);
+				ParquetRecordWriter<RowMetaAndData> recordWriter = ugi.doAs(new PrivilegedAction<ParquetRecordWriter<RowMetaAndData>>() {
+					@Override
+					public ParquetRecordWriter<RowMetaAndData> run() {
+						try {
+							FixedParquetOutputFormat nativeParquetOutputFormat = new FixedParquetOutputFormat(
+									new PentahoParquetWriteSupport(outputFields));
+							return (ParquetRecordWriter<RowMetaAndData>) nativeParquetOutputFormat
+									.getRecordWriter(task);
+						} catch (IOException | InterruptedException e) {
+							e.printStackTrace();
+						};
+						return null;
+					}
+				});
 				return new PentahoParquetRecordWriter(recordWriter, task);
 			} catch (IOException e) {
 				throw new RuntimeException("Some error accessing parquet files", e);
-			} catch (InterruptedException e) {
-				// logging here
-				e.printStackTrace();
-				throw new RuntimeException("This should never happen " + e);
+			} finally {
 			}
 		});
 	}

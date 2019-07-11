@@ -31,6 +31,7 @@ public class HadoopFormatBase {
   protected <R> R inClassloader( SupplierWithException<R> action ) throws Exception {
     ClassLoader cl = Thread.currentThread().getContextClassLoader();
     try {
+    	ClassLoader classLoader = getClass().getClassLoader();
       Thread.currentThread().setContextClassLoader( getClass().getClassLoader() );
 
       return action.get();

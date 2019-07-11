@@ -99,8 +99,9 @@ public class DataMaskingHadoopProxyUtils extends DataMaskingHadoopProxyUtilsPare
 	 * 
 	 * @param path
 	 * @param conf
+	 * @throws IOException 
 	 */
-	public UserGroupInformation loginCheckAndAddConfigReturnUGI(URI path, Configuration conf) {
+	public UserGroupInformation loginCheckAndAddConfigReturnUGI(URI path, Configuration conf) throws IOException {
 		addConfig(path, conf);
 		String string = conf.get(CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION);
 		if (string != null && "KERBEROS".equalsIgnoreCase(string)) {
@@ -120,7 +121,7 @@ public class DataMaskingHadoopProxyUtils extends DataMaskingHadoopProxyUtilsPare
 				}
 			}
 		}
-		return null;
+		return UserGroupInformation.getCurrentUser();
 	}
 
 	/**
