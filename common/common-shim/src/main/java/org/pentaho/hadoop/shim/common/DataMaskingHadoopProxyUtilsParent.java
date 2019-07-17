@@ -76,7 +76,7 @@ public class DataMaskingHadoopProxyUtilsParent {
 	 * @return
 	 * @throws LoginException
 	 */
-	private static LoginContext getLoginContextFromKeytab(String principal, String keytab) throws LoginException {
+	public static LoginContext getLoginContextFromKeytab(String principal, String keytab) throws LoginException {
 		Map<String, String> keytabConfig = new HashMap<String, String>(LOGIN_CONFIG_OPTS_KERBEROS_KEYTAB);
 		keytabConfig.put("keyTab", keytab);
 		keytabConfig.put("principal", principal);

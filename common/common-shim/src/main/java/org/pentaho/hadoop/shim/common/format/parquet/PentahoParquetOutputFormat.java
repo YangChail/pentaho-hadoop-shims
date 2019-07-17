@@ -78,7 +78,6 @@ public class PentahoParquetOutputFormat extends HadoopFormatBase implements IPen
 
 	public PentahoParquetOutputFormat() throws Exception {
 		logger.info("We are initializing parquet output format");
-
 		inClassloader(() -> {
 			ConfigurationProxy conf = new ConfigurationProxy();
 			job = Job.getInstance(conf);
@@ -97,6 +96,7 @@ public class PentahoParquetOutputFormat extends HadoopFormatBase implements IPen
 		inClassloader(() -> {
 			S3NCredentialUtils.applyS3CredentialsToHadoopConfigurationIfNecessary(file, job.getConfiguration());
 			outputFile = new Path(S3NCredentialUtils.scrubFilePathIfNecessary(file));
+			lock.lock();
 			DataMaskingHadoopProxyUtils dataMaskingHadoopProxyUtils = new DataMaskingHadoopProxyUtils();
 			System.out.println("out---"+UserGroupInformation.getCurrentUser());
 			UserGroupInformation ugi = dataMaskingHadoopProxyUtils.loginCheckAndAddConfigReturnUGI(outputFile.toUri(),
@@ -125,8 +125,10 @@ public class PentahoParquetOutputFormat extends HadoopFormatBase implements IPen
 					return fs;
 				}
 			});
+			lock.unlock();
 			System.out.println("out---"+UserGroupInformation.getCurrentUser());
 			ParquetOutputFormat.setOutputPath(job, outputFile.getParent());
+			
 		});
 	}
 
@@ -210,6 +212,7 @@ public class PentahoParquetOutputFormat extends HadoopFormatBase implements IPen
 
 		return inClassloader(() -> {
 			try {
+				lock.lock();
 				DataMaskingHadoopProxyUtils dataMaskingHadoopProxyUtils = new DataMaskingHadoopProxyUtils();
 				UserGroupInformation ugi = dataMaskingHadoopProxyUtils
 						.loginCheckAndAddConfigReturnUGI(outputFile.toUri(), job.getConfiguration());
@@ -229,6 +232,7 @@ public class PentahoParquetOutputFormat extends HadoopFormatBase implements IPen
 						return null;
 					}
 				});
+				lock.unlock();
 				return new PentahoParquetRecordWriter(recordWriter, task);
 			} catch (IOException e) {
 				throw new RuntimeException("Some error accessing parquet files", e);

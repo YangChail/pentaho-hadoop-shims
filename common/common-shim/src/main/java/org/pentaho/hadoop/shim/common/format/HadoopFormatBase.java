@@ -21,19 +21,20 @@
  ******************************************************************************/
 package org.pentaho.hadoop.shim.common.format;
 
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+
 /**
  * Class for some base Input/Output Formats functionality, like classloders switching.
  * 
  * @author Alexander Buloichik
  */
 public class HadoopFormatBase {
-
-  protected <R> R inClassloader( SupplierWithException<R> action ) throws Exception {
+	public static Lock lock = new ReentrantLock();  
+  protected  <R> R inClassloader( SupplierWithException<R> action ) throws Exception {
     ClassLoader cl = Thread.currentThread().getContextClassLoader();
     try {
-    	ClassLoader classLoader = getClass().getClassLoader();
       Thread.currentThread().setContextClassLoader( getClass().getClassLoader() );
-
       return action.get();
 
     } finally {
@@ -41,13 +42,11 @@ public class HadoopFormatBase {
     }
   }
 
-  protected <R> void inClassloader( RunnableWithException<R> action ) throws Exception {
+  protected  <R> void inClassloader( RunnableWithException<R> action ) throws Exception {
     ClassLoader cl = Thread.currentThread().getContextClassLoader();
     try {
       Thread.currentThread().setContextClassLoader( getClass().getClassLoader() );
-
       action.get();
-
     } finally {
       Thread.currentThread().setContextClassLoader( cl );
     }

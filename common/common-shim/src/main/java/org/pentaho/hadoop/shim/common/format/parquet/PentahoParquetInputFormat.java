@@ -81,9 +81,7 @@ public class PentahoParquetInputFormat extends HadoopFormatBase implements IPent
 		inClassloader(() -> {
 			ConfigurationProxy conf = new ConfigurationProxy();
 			job = Job.getInstance(conf);
-
 			nativeParquetInputFormat = new ParquetInputFormat<>();
-
 			ParquetInputFormat.setReadSupportClass(job, PentahoParquetReadSupport.class);
 			ParquetInputFormat.setTaskSideMetaData(job, false);
 		});
@@ -102,22 +100,37 @@ public class PentahoParquetInputFormat extends HadoopFormatBase implements IPent
 		inClassloader(() -> {
 			S3NCredentialUtils.applyS3CredentialsToHadoopConfigurationIfNecessary(file, job.getConfiguration());
 			Path filePath = new Path(S3NCredentialUtils.scrubFilePathIfNecessary(file));
+			lock.lock();
 			DataMaskingHadoopProxyUtils dataMaskingHadoopProxyUtils = new DataMaskingHadoopProxyUtils();
-			org.apache.hadoop.fs.FileSystem fs = dataMaskingHadoopProxyUtils.getFileSystem(filePath.toUri(),
+			UserGroupInformation ugi = dataMaskingHadoopProxyUtils.loginCheckAndAddConfigReturnUGI(filePath.toUri(),
 					job.getConfiguration());
-			if (!fs.exists(filePath)) {
-				throw new NoSuchFileException(file);
-			}
-			if (fs.getFileStatus(filePath).isDirectory()) { // directory
-				ParquetInputFormat.setInputPaths(job, filePath);
-				ParquetInputFormat.setInputDirRecursive(job, true);
-			} else { // file
-				ParquetInputFormat.setInputPaths(job, filePath.getParent());
-				ParquetInputFormat.setInputDirRecursive(job, false);
-				ParquetInputFormat.setInputPathFilter(job, ReadFileFilter.class);
-				job.getConfiguration().set(ReadFileFilter.FILTER_DIR, filePath.getParent().toString());
-				job.getConfiguration().set(ReadFileFilter.FILTER_FILE, filePath.toString());
-			}
+			ugi.doAs(new PrivilegedAction<FileSystem>() {
+				@Override
+				public FileSystem run() {
+					FileSystem fs = null;
+					try {
+						fs = FileSystem.get(filePath.toUri(), job.getConfiguration());
+						if (!fs.exists(filePath)) {
+							throw new NoSuchFileException(file);
+						}
+						if (fs.getFileStatus(filePath).isDirectory()) { // directory
+							ParquetInputFormat.setInputPaths(job, filePath);
+							ParquetInputFormat.setInputDirRecursive(job, true);
+							job.getConfiguration().set(ReadFileFilter.FILTER_DIR, filePath.toString());
+						} else { // file
+							ParquetInputFormat.setInputPaths(job, filePath.getParent());
+							ParquetInputFormat.setInputDirRecursive(job, false);
+							ParquetInputFormat.setInputPathFilter(job, ReadFileFilter.class);
+							job.getConfiguration().set(ReadFileFilter.FILTER_DIR, filePath.getParent().toString());
+							job.getConfiguration().set(ReadFileFilter.FILTER_FILE, filePath.toString());
+						}
+					} catch (IOException e) {
+						e.printStackTrace();
+					}
+					return fs;
+				}
+			});
+			lock.unlock();
 		});
 	}
 
@@ -143,10 +156,11 @@ public class PentahoParquetInputFormat extends HadoopFormatBase implements IPent
 	public List<IPentahoInputSplit> getSplits() throws Exception {
 		return inClassloader(() -> {
 			String string = job.getConfiguration().get(ReadFileFilter.FILTER_DIR);
-			List<InputSplit> splits =new ArrayList<>();
-			DataMaskingHadoopProxyUtils dataMaskingHadoopProxyUtils=new DataMaskingHadoopProxyUtils();
+			List<InputSplit> splits = new ArrayList<>();
+			lock.lock();
+			DataMaskingHadoopProxyUtils dataMaskingHadoopProxyUtils = new DataMaskingHadoopProxyUtils();
 			UserGroupInformation ugi = dataMaskingHadoopProxyUtils.loginCheckAndAddConfigReturnUGI(new URI(string),
-					 job.getConfiguration());
+					job.getConfiguration());
 			ugi.doAs(new PrivilegedAction<FileSystem>() {
 				@Override
 				public FileSystem run() {
@@ -157,9 +171,10 @@ public class PentahoParquetInputFormat extends HadoopFormatBase implements IPent
 						e.printStackTrace();
 					}
 					splits.addAll(split1s);
-					return 	null;
+					return null;
 				}
 			});
+			lock.unlock();
 			return splits.stream().map(PentahoInputSplitImpl::new).collect(Collectors.toList());
 		});
 	}
@@ -169,10 +184,11 @@ public class PentahoParquetInputFormat extends HadoopFormatBase implements IPent
 	public IPentahoRecordReader createRecordReader(IPentahoInputSplit split) throws Exception {
 		return inClassloader(() -> {
 			String string = job.getConfiguration().get(ReadFileFilter.FILTER_DIR);
-			DataMaskingHadoopProxyUtils dataMaskingHadoopProxyUtils=new DataMaskingHadoopProxyUtils();
+			lock.lock();
+			DataMaskingHadoopProxyUtils dataMaskingHadoopProxyUtils = new DataMaskingHadoopProxyUtils();
 			UserGroupInformation ugi = dataMaskingHadoopProxyUtils.loginCheckAndAddConfigReturnUGI(new URI(string),
-					 job.getConfiguration());
-			return 	ugi.doAs(new PrivilegedAction<PentahoParquetRecordReader>() {
+					job.getConfiguration());
+			PentahoParquetRecordReader doAs = ugi.doAs(new PrivilegedAction<PentahoParquetRecordReader>() {
 				@Override
 				public PentahoParquetRecordReader run() {
 					PentahoInputSplitImpl pentahoInputSplit = (PentahoInputSplitImpl) split;
@@ -180,20 +196,22 @@ public class PentahoParquetInputFormat extends HadoopFormatBase implements IPent
 					ReadSupport<RowMetaAndData> readSupport = new PentahoParquetReadSupport();
 					ParquetRecordReader<RowMetaAndData> nativeRecordReader = new ParquetRecordReader<RowMetaAndData>(
 							readSupport, ParquetInputFormat.getFilter(job.getConfiguration()));
-					TaskAttemptContextImpl task = new TaskAttemptContextImpl(job.getConfiguration(), new TaskAttemptID());
+					TaskAttemptContextImpl task = new TaskAttemptContextImpl(job.getConfiguration(),
+							new TaskAttemptID());
 					try {
 						nativeRecordReader.initialize(inputSplit, task);
-					} catch (IOException e) {
-						// TODO Auto-generated catch block
-						e.printStackTrace();
-					} catch (InterruptedException e) {
+					} catch (IOException | InterruptedException e) {
 						// TODO Auto-generated catch block
 						e.printStackTrace();
 					}
-					return 	 new PentahoParquetRecordReader(nativeRecordReader);
+					return new PentahoParquetRecordReader(nativeRecordReader);
 				}
 			});
+			lock.unlock();
+			return doAs;
+
 		});
+
 	}
 
 	@Override
@@ -202,11 +220,11 @@ public class PentahoParquetInputFormat extends HadoopFormatBase implements IPent
 			ConfigurationProxy conf = new ConfigurationProxy();
 			S3NCredentialUtils.applyS3CredentialsToHadoopConfigurationIfNecessary(file, conf);
 			Path filePath = new Path(S3NCredentialUtils.scrubFilePathIfNecessary(file));
+			lock.lock();
 			DataMaskingHadoopProxyUtils dataMaskingHadoopProxyUtils = new DataMaskingHadoopProxyUtils();
 			UserGroupInformation ugi = dataMaskingHadoopProxyUtils.loginCheckAndAddConfigReturnUGI(filePath.toUri(),
 					conf);
 			List<Footer> footers1 = new ArrayList<>();
-			System.out.println(UserGroupInformation.getCurrentUser());
 			ugi.doAs(new PrivilegedAction<FileSystem>() {
 				@Override
 				public FileSystem run() {
@@ -223,7 +241,7 @@ public class PentahoParquetInputFormat extends HadoopFormatBase implements IPent
 					return fileSystem;
 				}
 			});
-			System.out.println(UserGroupInformation.getCurrentUser());
+			lock.unlock();
 			if (footers1.isEmpty()) {
 				return new ArrayList<IParquetInputField>();
 			} else {

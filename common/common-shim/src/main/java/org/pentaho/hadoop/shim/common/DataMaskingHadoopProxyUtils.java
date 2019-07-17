@@ -10,11 +10,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import javax.security.auth.Subject;
+import javax.security.auth.login.LoginContext;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.hadoop.security.UserGroupInformation.AuthenticationMethod;
 
 /**
  * kerberos auth
@@ -42,10 +46,14 @@ public class DataMaskingHadoopProxyUtils extends DataMaskingHadoopProxyUtilsPare
 			String connectUrl = (String) args[0];
 			Map<String, String> config = getConfFromWeb(connectUrl);
 			if (config != null) {
+				String pricipal = config.get(PRINCIPAL);
+				if(UserGroupInformation.getCurrentUser().toString().equals(pricipal)) {
+					return;
+				}
 				Configuration conf = new Configuration();
 				conf.set("hadoop.security.authentication", "kerberos");
 				UserGroupInformation.setConfiguration(conf);
-				getloginSubject(config.get(PRINCIPAL), config.get(KEYTAB), config.get(CONF));
+				//getloginSubject(config.get(PRINCIPAL), config.get(KEYTAB), config.get(CONF));
 				System.setProperty("java.security.krb5.conf", config.get(CONF));
 				UserGroupInformation.loginUserFromKeytab(config.get(PRINCIPAL), config.get(KEYTAB));
 			}
@@ -82,6 +90,10 @@ public class DataMaskingHadoopProxyUtils extends DataMaskingHadoopProxyUtilsPare
 			Map<String, String> config = getConfFromWeb(key);
 			if (config != null) {
 				try {
+					String pricipal = config.get(PRINCIPAL);
+					if(UserGroupInformation.getCurrentUser().toString().equals(pricipal)) {
+						return;
+					}
 					System.setProperty("java.security.krb5.conf", config.get(CONF));
 					UserGroupInformation.loginUserFromKeytab(config.get(PRINCIPAL), config.get(KEYTAB));
 					FileSystem.get(path, conf);
@@ -110,11 +122,16 @@ public class DataMaskingHadoopProxyUtils extends DataMaskingHadoopProxyUtilsPare
 			Map<String, String> config = getConfFromWeb(key);
 			if (config != null) {
 				try {
+					String pricipal = config.get(PRINCIPAL);
+					UserGroupInformation currentUser = UserGroupInformation.getCurrentUser();
+					if(currentUser.toString().equals(pricipal)) {
+						return currentUser;
+					}
 					System.setProperty("java.security.krb5.conf", config.get(CONF));
-					UserGroupInformation loginUserFromKeytabAndReturnUGI = UserGroupInformation
+					UserGroupInformation ugi = UserGroupInformation
 							.loginUserFromKeytabAndReturnUGI(config.get(PRINCIPAL), config.get(KEYTAB));
 					logger.info(key + " kerberos login success");
-					return loginUserFromKeytabAndReturnUGI;
+					return ugi;
 				} catch (Exception e) {
 					logger.error("kerberos login error", e);
 					return null;
