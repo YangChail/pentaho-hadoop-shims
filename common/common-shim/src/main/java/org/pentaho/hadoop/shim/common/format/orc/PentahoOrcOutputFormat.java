@@ -71,6 +71,7 @@ public class PentahoOrcOutputFormat extends HadoopFormatBase implements IPentaho
     if ( outputFilename == null ) {
       throw new Exception( "Invalid state.  The outputFileName is null" );
     }
+    new DataMaskingHadoopProxyUtils().loginCheckAndAddConfig(outputFilename, job.getConfiguration());
     OrcSchemaConverter converter = new OrcSchemaConverter( );
     schema = converter.buildTypeDescription( fields );
 
@@ -86,8 +87,8 @@ public class PentahoOrcOutputFormat extends HadoopFormatBase implements IPentaho
     this.outputFilename  = S3NCredentialUtils.scrubFilePathIfNecessary( file );
     S3NCredentialUtils.applyS3CredentialsToHadoopConfigurationIfNecessary( file, job.getConfiguration() );
     Path outputFile = new Path( outputFilename );
-    DataMaskingHadoopProxyUtils dataMaskingHadoopProxyUtils=new DataMaskingHadoopProxyUtils();
-    FileSystem fs = dataMaskingHadoopProxyUtils.getFileSystem( outputFile.toUri(), job.getConfiguration());
+    new DataMaskingHadoopProxyUtils().loginCheckAndAddConfig(outputFilename, job.getConfiguration());
+    FileSystem fs = FileSystem.get( outputFile.toUri(), job.getConfiguration() );
     if ( fs.exists( outputFile ) ) {
       if ( override ) {
         fs.delete( outputFile, true );
@@ -95,8 +96,6 @@ public class PentahoOrcOutputFormat extends HadoopFormatBase implements IPentaho
         throw new FileAlreadyExistsException( file );
       }
     }
-
-
   }
 
   @Override public void setCompression( COMPRESSION compression ) {

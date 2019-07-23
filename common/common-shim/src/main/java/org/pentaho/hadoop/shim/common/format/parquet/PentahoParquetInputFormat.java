@@ -22,7 +22,6 @@
 package org.pentaho.hadoop.shim.common.format.parquet;
 
 import java.io.IOException;
-import java.net.URI;
 import java.nio.file.NoSuchFileException;
 import java.security.PrivilegedAction;
 import java.util.ArrayList;
@@ -70,182 +69,127 @@ import org.pentaho.hadoop.shim.common.format.S3NCredentialUtils;
  */
 public class PentahoParquetInputFormat extends HadoopFormatBase implements IPentahoParquetInputFormat {
 
-	private static final Logger logger = Logger.getLogger(PentahoParquetInputFormat.class);
+  private static final Logger logger = Logger.getLogger( PentahoParquetInputFormat.class );
 
-	private ParquetInputFormat<RowMetaAndData> nativeParquetInputFormat;
-	private Job job;
+  private ParquetInputFormat<RowMetaAndData> nativeParquetInputFormat;
+  private Job job;
 
-	public PentahoParquetInputFormat() throws Exception {
-		logger.info("We are initializing parquet input format");
+  public PentahoParquetInputFormat() throws Exception {
+    logger.info( "We are initializing parquet input format" );
 
-		inClassloader(() -> {
-			ConfigurationProxy conf = new ConfigurationProxy();
-			job = Job.getInstance(conf);
-			nativeParquetInputFormat = new ParquetInputFormat<>();
-			ParquetInputFormat.setReadSupportClass(job, PentahoParquetReadSupport.class);
-			ParquetInputFormat.setTaskSideMetaData(job, false);
-		});
-	}
+    inClassloader( () -> {
+      ConfigurationProxy conf = new ConfigurationProxy();
+      job = Job.getInstance( conf );
+      nativeParquetInputFormat = new ParquetInputFormat<>();
 
-	@Override
-	public void setSchema(List<IParquetInputField> inputFields) throws Exception {
-		ParquetInputFieldList fieldList = new ParquetInputFieldList(inputFields);
-		inClassloader(() -> {
-			job.getConfiguration().set(ParquetConverter.PARQUET_SCHEMA_CONF_KEY, fieldList.marshall());
-		});
-	}
+      ParquetInputFormat.setReadSupportClass( job, PentahoParquetReadSupport.class );
+      ParquetInputFormat.setTaskSideMetaData( job, false );
+    } );
+  }
 
-	@Override
-	public void setInputFile(String file) throws Exception {
-		inClassloader(() -> {
-			S3NCredentialUtils.applyS3CredentialsToHadoopConfigurationIfNecessary(file, job.getConfiguration());
-			Path filePath = new Path(S3NCredentialUtils.scrubFilePathIfNecessary(file));
-			lock.lock();
-			DataMaskingHadoopProxyUtils dataMaskingHadoopProxyUtils = new DataMaskingHadoopProxyUtils();
-			UserGroupInformation ugi = dataMaskingHadoopProxyUtils.loginCheckAndAddConfigReturnUGI(filePath.toUri(),
-					job.getConfiguration());
-			ugi.doAs(new PrivilegedAction<FileSystem>() {
-				@Override
-				public FileSystem run() {
-					FileSystem fs = null;
-					try {
-						fs = FileSystem.get(filePath.toUri(), job.getConfiguration());
-						if (!fs.exists(filePath)) {
-							throw new NoSuchFileException(file);
-						}
-						if (fs.getFileStatus(filePath).isDirectory()) { // directory
-							ParquetInputFormat.setInputPaths(job, filePath);
-							ParquetInputFormat.setInputDirRecursive(job, true);
-							job.getConfiguration().set(ReadFileFilter.FILTER_DIR, filePath.toString());
-						} else { // file
-							ParquetInputFormat.setInputPaths(job, filePath.getParent());
-							ParquetInputFormat.setInputDirRecursive(job, false);
-							ParquetInputFormat.setInputPathFilter(job, ReadFileFilter.class);
-							job.getConfiguration().set(ReadFileFilter.FILTER_DIR, filePath.getParent().toString());
-							job.getConfiguration().set(ReadFileFilter.FILTER_FILE, filePath.toString());
-						}
-					} catch (IOException e) {
-						e.printStackTrace();
-					}
-					return fs;
-				}
-			});
-			lock.unlock();
-		});
-	}
+  @Override
+  public void setSchema( List<IParquetInputField> inputFields ) throws Exception {
+    ParquetInputFieldList fieldList = new ParquetInputFieldList( inputFields );
+    inClassloader( () -> {
+      job.getConfiguration().set( ParquetConverter.PARQUET_SCHEMA_CONF_KEY, fieldList.marshall() );
+    } );
+  }
 
-	@Override
-	public void setSplitSize(long blockSize) throws Exception {
-		inClassloader(() -> {
-			/**
-			 * TODO Files splitting is temporary disabled. We need some UI checkbox for
-			 * allow it, because some parquet files can't be splitted by errors in previous
-			 * implementation or other things. Parquet reports source of problem only to
-			 * logs, not to exception. See CorruptDeltaByteArrays.requiresSequentialReads().
-			 * 
-			 * mapr510 and mapr520 doesn't support SPLIT_FILES property
-			 */
-			// ParquetInputFormat.setMaxInputSplitSize( job, blockSize );
+  @Override
+  public void setInputFile( String file ) throws Exception {
+    inClassloader( () -> {
+    	new DataMaskingHadoopProxyUtils().loginCheckAndAddConfig(file, job.getConfiguration() );
+      S3NCredentialUtils.applyS3CredentialsToHadoopConfigurationIfNecessary( file, job.getConfiguration() );
+      Path filePath = new Path( S3NCredentialUtils.scrubFilePathIfNecessary( file ) );
+      FileSystem fs = FileSystem.get( filePath.toUri(), job.getConfiguration() );
+      if ( !fs.exists( filePath ) ) {
+        throw new NoSuchFileException( file );
+      }
+      if ( fs.getFileStatus( filePath ).isDirectory() ) { // directory
+        ParquetInputFormat.setInputPaths( job, filePath );
+        ParquetInputFormat.setInputDirRecursive( job, true );
+      } else { // file
+        ParquetInputFormat.setInputPaths( job, filePath.getParent() );
+        ParquetInputFormat.setInputDirRecursive( job, false );
+        ParquetInputFormat.setInputPathFilter( job, ReadFileFilter.class );
+        job.getConfiguration().set( ReadFileFilter.FILTER_DIR, filePath.getParent().toString() );
+        job.getConfiguration().set( ReadFileFilter.FILTER_FILE, filePath.toString() );
+      }
+    } );
+  }
+
+  @Override
+  public void setSplitSize( long blockSize ) throws Exception {
+    inClassloader( () -> {
+      /**
+       * TODO Files splitting is temporary disabled. We need some UI checkbox for allow it, because some parquet files
+       * can't be splitted by errors in previous implementation or other things. Parquet reports source of problem only
+       * to logs, not to exception. See CorruptDeltaByteArrays.requiresSequentialReads().
+       * 
+       * mapr510 and mapr520 doesn't support SPLIT_FILES property
+       */
+      // ParquetInputFormat.setMaxInputSplitSize( job, blockSize );
 //#if shim_type!="MAPR"
-			job.getConfiguration().setBoolean(ParquetInputFormat.SPLIT_FILES, false);
+      job.getConfiguration().setBoolean( ParquetInputFormat.SPLIT_FILES, false );
 //#endif
-		});
-	}
+    } );
+  }
 
-	@Override
-	public List<IPentahoInputSplit> getSplits() throws Exception {
-		return inClassloader(() -> {
-			String string = job.getConfiguration().get(ReadFileFilter.FILTER_DIR);
-			List<InputSplit> splits = new ArrayList<>();
-			lock.lock();
-			DataMaskingHadoopProxyUtils dataMaskingHadoopProxyUtils = new DataMaskingHadoopProxyUtils();
-			UserGroupInformation ugi = dataMaskingHadoopProxyUtils.loginCheckAndAddConfigReturnUGI(new URI(string),
-					job.getConfiguration());
-			ugi.doAs(new PrivilegedAction<FileSystem>() {
-				@Override
-				public FileSystem run() {
-					List<InputSplit> split1s = new ArrayList<>();
-					try {
-						split1s = nativeParquetInputFormat.getSplits(job);
-					} catch (IOException e) {
-						e.printStackTrace();
-					}
-					splits.addAll(split1s);
-					return null;
-				}
-			});
-			lock.unlock();
-			return splits.stream().map(PentahoInputSplitImpl::new).collect(Collectors.toList());
-		});
-	}
+  @Override
+  public List<IPentahoInputSplit> getSplits() throws Exception {
+    return inClassloader( () -> {
+    	new DataMaskingHadoopProxyUtils().loginCheckAndAddConfig(job.getConfiguration().get(ReadFileFilter.FILTER_DIR), job.getConfiguration() );
+      List<InputSplit> splits = nativeParquetInputFormat.getSplits( job );
+      return splits.stream().map( PentahoInputSplitImpl::new ).collect( Collectors.toList() );
+    } );
+  }
 
-	// for parquet not actual to point split
-	@Override
-	public IPentahoRecordReader createRecordReader(IPentahoInputSplit split) throws Exception {
-		return inClassloader(() -> {
-			String string = job.getConfiguration().get(ReadFileFilter.FILTER_DIR);
-			lock.lock();
-			DataMaskingHadoopProxyUtils dataMaskingHadoopProxyUtils = new DataMaskingHadoopProxyUtils();
-			UserGroupInformation ugi = dataMaskingHadoopProxyUtils.loginCheckAndAddConfigReturnUGI(new URI(string),
-					job.getConfiguration());
-			PentahoParquetRecordReader doAs = ugi.doAs(new PrivilegedAction<PentahoParquetRecordReader>() {
-				@Override
-				public PentahoParquetRecordReader run() {
-					PentahoInputSplitImpl pentahoInputSplit = (PentahoInputSplitImpl) split;
-					InputSplit inputSplit = pentahoInputSplit.getInputSplit();
-					ReadSupport<RowMetaAndData> readSupport = new PentahoParquetReadSupport();
-					ParquetRecordReader<RowMetaAndData> nativeRecordReader = new ParquetRecordReader<RowMetaAndData>(
-							readSupport, ParquetInputFormat.getFilter(job.getConfiguration()));
-					TaskAttemptContextImpl task = new TaskAttemptContextImpl(job.getConfiguration(),
-							new TaskAttemptID());
-					try {
-						nativeRecordReader.initialize(inputSplit, task);
-					} catch (IOException | InterruptedException e) {
-						// TODO Auto-generated catch block
-						e.printStackTrace();
-					}
-					return new PentahoParquetRecordReader(nativeRecordReader);
-				}
-			});
-			lock.unlock();
-			return doAs;
+  // for parquet not actual to point split
+  @Override
+  public IPentahoRecordReader createRecordReader( IPentahoInputSplit split ) throws Exception {
+    return inClassloader( () -> {
+      new DataMaskingHadoopProxyUtils().loginCheckAndAddConfig(job.getConfiguration().get(ReadFileFilter.FILTER_DIR), job.getConfiguration() );
+      PentahoInputSplitImpl pentahoInputSplit = (PentahoInputSplitImpl) split;
+      InputSplit inputSplit = pentahoInputSplit.getInputSplit();
 
-		});
+      ReadSupport<RowMetaAndData> readSupport = new PentahoParquetReadSupport();
 
-	}
+      ParquetRecordReader<RowMetaAndData> nativeRecordReader =
+          new ParquetRecordReader<RowMetaAndData>( readSupport, ParquetInputFormat.getFilter( job
+              .getConfiguration() ) );
+      TaskAttemptContextImpl task = new TaskAttemptContextImpl( job.getConfiguration(), new TaskAttemptID() );
+      nativeRecordReader.initialize( inputSplit, task );
+
+      return new PentahoParquetRecordReader( nativeRecordReader );
+    } );
+  }
 
 	@Override
 	public List<IParquetInputField> readSchema(String file) throws Exception {
 		return inClassloader(() -> {
 			ConfigurationProxy conf = new ConfigurationProxy();
-			S3NCredentialUtils.applyS3CredentialsToHadoopConfigurationIfNecessary(file, conf);
-			Path filePath = new Path(S3NCredentialUtils.scrubFilePathIfNecessary(file));
-			lock.lock();
-			DataMaskingHadoopProxyUtils dataMaskingHadoopProxyUtils = new DataMaskingHadoopProxyUtils();
-			UserGroupInformation ugi = dataMaskingHadoopProxyUtils.loginCheckAndAddConfigReturnUGI(filePath.toUri(),
-					conf);
-			List<Footer> footers1 = new ArrayList<>();
-			ugi.doAs(new PrivilegedAction<FileSystem>() {
+			UserGroupInformation ugi = new DataMaskingHadoopProxyUtils().loginCheckAndAddConfigReturnUGI(file, conf);
+			List<Footer>footers =ugi.doAs(new PrivilegedAction<List<Footer>>() {
 				@Override
-				public FileSystem run() {
-					FileSystem fileSystem = null;
+				public List<Footer> run() {
+					List<Footer> footers=new ArrayList<>();
+					S3NCredentialUtils.applyS3CredentialsToHadoopConfigurationIfNecessary(file, conf);
+					Path filePath = new Path(S3NCredentialUtils.scrubFilePathIfNecessary(file));
+					FileSystem fs;
 					try {
-						fileSystem = FileSystem.get(filePath.toUri(), conf);
-						FileStatus fileStatus = fileSystem.getFileStatus(filePath);
-						System.out.println(UserGroupInformation.getCurrentUser());
-						List<Footer> footers = ParquetFileReader.readFooters(conf, fileStatus, true);
-						footers1.addAll(footers);
+						fs = FileSystem.get(filePath.toUri(), conf);
+						FileStatus fileStatus = fs.getFileStatus(filePath);
+						footers = ParquetFileReader.readFooters(conf, fileStatus, true);
 					} catch (IOException e) {
 						e.printStackTrace();
 					}
-					return fileSystem;
+					return footers;
 				}
 			});
-			lock.unlock();
-			if (footers1.isEmpty()) {
+			if (footers.isEmpty()) {
 				return new ArrayList<IParquetInputField>();
 			} else {
-				ParquetMetadata meta = footers1.get(0).getParquetMetadata();
+				ParquetMetadata meta = footers.get(0).getParquetMetadata();
 				MessageType schema = meta.getFileMetaData().getSchema();
 				return ParquetConverter.buildInputFields(schema);
 			}

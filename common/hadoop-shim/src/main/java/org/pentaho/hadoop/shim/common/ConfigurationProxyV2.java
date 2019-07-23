@@ -55,6 +55,7 @@ public class ConfigurationProxyV2 implements Configuration {
     job.getConfiguration().addResource( "hive-site.xml" );
     job.getConfiguration().addResource( "hbase-site.xml" );
     job.getConfiguration().addResource( "kerberos.xml" );
+    job.getConfiguration().setBoolean("ipc.client.fallback-to-simple-auth-allowed", true);
   }
 
   public JobConf getJobConf() {

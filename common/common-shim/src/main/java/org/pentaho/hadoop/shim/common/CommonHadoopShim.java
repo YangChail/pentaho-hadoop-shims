@@ -233,11 +233,14 @@ public class CommonHadoopShim implements HadoopShim {
     ClassLoader classLoader = getClass().getClassLoader();
     Thread.currentThread().setContextClassLoader(classLoader );
     try {
-    	JobConf asConfiguration = ShimUtils.asConfiguration( conf );
-    	DataMaskingHadoopProxyUtils dataMaskingHadoopProxyUtils=new DataMaskingHadoopProxyUtils();
-    	org.apache.hadoop.fs.FileSystem fileSystem = dataMaskingHadoopProxyUtils.getFileSystem(uri, asConfiguration);
-      return new FileSystemProxy( fileSystem );
-    } finally {
+			JobConf asConfiguration = ShimUtils.asConfiguration(conf);
+			DataMaskingHadoopProxyUtils dataMaskingHadoopProxyUtils = new DataMaskingHadoopProxyUtils();
+			org.apache.hadoop.fs.FileSystem fileSystem = null;
+			dataMaskingHadoopProxyUtils.loginCheckAndAddConfig(uri, asConfiguration);
+			fileSystem = org.apache.hadoop.fs.FileSystem.get(uri, asConfiguration);
+			return new FileSystemProxy(fileSystem);
+    } 
+	finally {
       Thread.currentThread().setContextClassLoader( cl );
     }
   }

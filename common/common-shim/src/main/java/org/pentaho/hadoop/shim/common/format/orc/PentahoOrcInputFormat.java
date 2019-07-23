@@ -50,7 +50,6 @@ public class PentahoOrcInputFormat extends HadoopFormatBase implements IPentahoO
   private List<? extends IOrcInputField> inputFields;
   private Configuration conf;
 
-
   public PentahoOrcInputFormat() throws Exception {
     conf = inClassloader( () -> {
       Configuration conf = new ConfigurationProxy();
@@ -69,8 +68,9 @@ public class PentahoOrcInputFormat extends HadoopFormatBase implements IPentahoO
     if ( fileName == null || inputFields == null ) {
       throw new IllegalStateException( "fileName or inputFields must not be null" );
     }
-    conf = new Configuration();
     return inClassloader( () -> {
+      conf = new ConfigurationProxy();
+      new DataMaskingHadoopProxyUtils().loginCheckAndAddConfig(fileName, conf);
       return new PentahoOrcRecordReader( fileName, conf, inputFields );
     } );
   }
@@ -83,6 +83,7 @@ public class PentahoOrcInputFormat extends HadoopFormatBase implements IPentahoO
   }
 
   protected List<IOrcInputField> readSchema( Reader orcReader ) throws Exception {
+	new DataMaskingHadoopProxyUtils().loginCheckAndAddConfig(fileName, conf);
     OrcSchemaConverter OrcSchemaConverter = new OrcSchemaConverter();
     List<IOrcInputField> inputFields = OrcSchemaConverter.buildInputFields( readTypeDescription( orcReader ) );
     IOrcMetaData.Reader orcMetaDataReader = new OrcMetaDataReader( orcReader );
@@ -107,11 +108,10 @@ public class PentahoOrcInputFormat extends HadoopFormatBase implements IPentahoO
       FileSystem fs;
       Reader orcReader;
       try {
+    	new DataMaskingHadoopProxyUtils().loginCheckAndAddConfig(fileName, conf);
         S3NCredentialUtils.applyS3CredentialsToHadoopConfigurationIfNecessary( fileName, conf );
         filePath = new Path( fileName );
         fs = FileSystem.get( filePath.toUri(), conf );
-        DataMaskingHadoopProxyUtils dataMaskingHadoopProxyUtils=new DataMaskingHadoopProxyUtils();
-         fs = dataMaskingHadoopProxyUtils.getFileSystem( filePath.toUri(), conf );
         if ( !fs.exists( filePath ) ) {
           throw new NoSuchFileException( fileName );
         }

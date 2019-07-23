@@ -21,8 +21,13 @@
  ******************************************************************************/
 package org.pentaho.hadoop.shim.common.format;
 
+import java.security.PrivilegedAction;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.security.UserGroupInformation;
+import org.pentaho.hadoop.shim.common.DataMaskingHadoopProxyUtils;
 
 /**
  * Class for some base Input/Output Formats functionality, like classloders switching.
@@ -30,8 +35,8 @@ import java.util.concurrent.locks.ReentrantLock;
  * @author Alexander Buloichik
  */
 public class HadoopFormatBase {
-	public static Lock lock = new ReentrantLock();  
   protected  <R> R inClassloader( SupplierWithException<R> action ) throws Exception {
+	
     ClassLoader cl = Thread.currentThread().getContextClassLoader();
     try {
       Thread.currentThread().setContextClassLoader( getClass().getClassLoader() );

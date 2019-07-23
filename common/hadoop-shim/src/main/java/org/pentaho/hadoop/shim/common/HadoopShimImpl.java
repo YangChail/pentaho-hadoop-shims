@@ -21,8 +21,6 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.filecache.DistributedCache;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.security.UserGroupInformation;
 import org.pentaho.hadoop.shim.HadoopConfiguration;
 import org.pentaho.hadoop.shim.HadoopConfigurationFileSystemManager;
 import org.pentaho.hadoop.shim.api.mapred.RunningJob;
@@ -58,16 +56,10 @@ public class HadoopShimImpl extends CommonHadoopShim {
         String classpath = conf.get( "mapred.job.classpath.files" );
         conf.set( "mapred.job.classpath.files",
           classpath == null ? file.toString() : classpath + getClusterPathSeparator() + file.toString() );
-        DataMaskingHadoopProxyUtils dataMaskingHadoopProxyUtils=new DataMaskingHadoopProxyUtils();
-        FileSystem fs;
-		try {
-			fs = dataMaskingHadoopProxyUtils.getFileSystem( file.toUri(), conf);
-			URI uri = fs.makeQualified( file ).toUri();
-	        DistributedCache.addCacheFile( uri, conf );
-		} catch (InterruptedException e) {
-			e.printStackTrace();
-		}
-        
+        FileSystem fs = FileSystem.get( file.toUri(), conf );
+        URI uri = fs.makeQualified( file ).toUri();
+
+        DistributedCache.addCacheFile( uri, conf );
       }
 
       public String getClusterPathSeparator() {
@@ -97,16 +89,13 @@ public class HadoopShimImpl extends CommonHadoopShim {
     ClassLoader cl = Thread.currentThread().getContextClassLoader();
     Thread.currentThread().setContextClassLoader( getClass().getClassLoader() );
     try {
-    	ConfigurationProxyV2 configurationProxyV2 = new ConfigurationProxyV2();
-      return configurationProxyV2;
+      return new ConfigurationProxyV2();
     } catch ( IOException e ) {
       throw new RuntimeException( "Unable to create configuration for new mapreduce api: ", e );
     } finally {
       Thread.currentThread().setContextClassLoader( cl );
     }
   }
-  
-  
 
   @Override
   public void configureConnectionInformation( String namenodeHost, String namenodePort, String jobtrackerHost,

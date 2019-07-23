@@ -51,6 +51,7 @@ public class ConfigurationProxy extends org.apache.hadoop.mapred.JobConf impleme
   public ConfigurationProxy() {
     super();
     addResource( "hdfs-site.xml" );
+    setBoolean("ipc.client.fallback-to-simple-auth-allowed", true);
   }
   /*
    * Wrap the call to {@link super#setMapperClass(Class)} to avoid generic type

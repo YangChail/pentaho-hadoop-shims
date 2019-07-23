@@ -21,6 +21,8 @@
  ******************************************************************************/
 package org.pentaho.hadoop.shim.common.invocationhandler;
 
+import org.pentaho.hadoop.shim.common.DataMaskingHadoopProxyUtils;
+
 /**
  * User: Dzmitry Stsiapanau Date: 01/17/2017 Time: 15:14
  */
@@ -70,13 +72,12 @@ public class DriverInvocationHandler implements InvocationHandler {
   public Object invoke( final Object proxy, Method method, Object[] args ) throws Throwable {
 
     try {
-      org.pentaho.hadoop.shim.common.DataMaskingHadoopProxyUtils.hiveKerberosAuthLogin(method, args);
+     new DataMaskingHadoopProxyUtils().hiveKerberosAuthLogin(method, args);
       Object o = method.invoke( driver, args );
       if ( o instanceof Connection ) {
         // Intercept the Connection object so we can proxy that too
         Connection proxiedConnection = (Connection) Proxy.newProxyInstance( o.getClass().getClassLoader(),
           new Class[] { Connection.class }, new ConnectionInvocationHandler( (Connection) o ) );
-
         String dbName = HiveSQLUtils.getDatabaseNameFromURL( (String) args[ 0 ] );
         useSchema( dbName, proxiedConnection.createStatement() );
 

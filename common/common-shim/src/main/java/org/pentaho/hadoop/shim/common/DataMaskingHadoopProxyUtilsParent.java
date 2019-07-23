@@ -26,6 +26,13 @@ public class DataMaskingHadoopProxyUtilsParent {
 	public static final String KEYTAB="keytab";
 	public static final String CONF="conf";
 	
+	public static final String KRB5_FILE_NAME = "krb5.conf";
+
+	public static final String CORE_SITE_FILE_NAME = "core-site.xml";
+	public static final String HDFS_SITE_NAME = "hdfs-site.xml";
+	public static final String YARN_SITE_NAME = "yarn-site.xml";
+	public static final String MAPRED_SITE_NAME = "mapred-site.xml";
+	
 	
 	private static final Map<String, String> LOGIN_CONFIG_OPTS_KERBEROS_KEYTAB = createLoginConfigOptsKerberosKeytabMap();
 	
