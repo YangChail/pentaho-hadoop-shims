@@ -212,6 +212,8 @@ public class CommonHadoopShim implements HadoopShim {
     ClassLoader cl = Thread.currentThread().getContextClassLoader();
     Thread.currentThread().setContextClassLoader( getClass().getClassLoader() );
     try {
+      // login
+      KerberosAuth.hadoopKerberosAuthLogin(conf);
       return new FileSystemProxy( org.apache.hadoop.fs.FileSystem.get( ShimUtils.asConfiguration( conf ) ) );
     } finally {
       Thread.currentThread().setContextClassLoader( cl );
