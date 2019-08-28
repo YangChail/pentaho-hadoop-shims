@@ -51,6 +51,7 @@ public class ConfigurationProxy extends org.apache.hadoop.mapred.JobConf impleme
   public ConfigurationProxy() {
     super();
     addResource( "hdfs-site.xml" );
+    addResource( "kerberos.xml" );
   }
   /*
    * Wrap the call to {@link super#setMapperClass(Class)} to avoid generic type
