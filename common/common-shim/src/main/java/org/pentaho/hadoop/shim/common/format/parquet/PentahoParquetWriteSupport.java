@@ -26,6 +26,7 @@ import java.math.MathContext;
 import java.math.RoundingMode;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.sql.Timestamp;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -33,6 +34,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.JulianFields;
 import java.util.ArrayList;
@@ -76,6 +78,8 @@ public class PentahoParquetWriteSupport extends WriteSupport<RowMetaAndData> {
   private RecordConsumer consumer;
   private List<? extends IParquetOutputField> outputFields;
   byte[] timestampBuffer = new byte[12];
+  private static final SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.");
+  private static final DateTimeFormatter dateTimeFormat = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSSSSSSSS Z");
 
   public PentahoParquetWriteSupport( List<? extends IParquetOutputField> outputFields ) {
     this.outputFields = outputFields;
@@ -174,6 +178,7 @@ public class PentahoParquetWriteSupport extends WriteSupport<RowMetaAndData> {
             case BOOLEAN:
               consumer.addBoolean( Boolean.parseBoolean( field.getDefaultValue() ) );
               break;
+            case INT_8:
             case INT_32:
               consumer.addInteger( Integer.parseInt( field.getDefaultValue() ) );
               break;
@@ -227,6 +232,10 @@ public class PentahoParquetWriteSupport extends WriteSupport<RowMetaAndData> {
               //$     consumer.addBinary( Binary.fromByteArray( bigDecimal.unscaledValue().toByteArray() ) );
               //#endif
               break;
+            case DECIMAL_FIXED_LEN_BYTE_ARRAY :
+				bigDecimal = new BigDecimal(field.getDefaultValue());
+				consumer.addBinary(getBinaryValue(bigDecimal, field));
+				break;
             case DECIMAL_INT_32:
               bigDecimal = new BigDecimal( field.getDefaultValue() );
               if ( bigDecimal != null ) {
@@ -290,6 +299,7 @@ public class PentahoParquetWriteSupport extends WriteSupport<RowMetaAndData> {
       case BOOLEAN:
         consumer.addBoolean( row.getBoolean( fieldIndex, false ) );
         break;
+      case INT_8:
       case INT_32:
         Long tmpLong = row.getInteger( fieldIndex, 0 );
         consumer.addInteger( tmpLong.intValue() );
@@ -338,6 +348,10 @@ public class PentahoParquetWriteSupport extends WriteSupport<RowMetaAndData> {
         //$     consumer.addBinary( Binary.fromByteArray( bigDecimal.unscaledValue().toByteArray() ) );
         //#endif
         break;
+      case DECIMAL_FIXED_LEN_BYTE_ARRAY :
+			bigDecimal = row.getBigNumber(fieldIndex, null);
+			consumer.addBinary(getBinaryValue(bigDecimal, field));
+			break;
       case DECIMAL_INT_32:
         bigDecimal = row.getBigNumber( fieldIndex, null );
         if ( bigDecimal != null ) {
@@ -399,6 +413,8 @@ public class PentahoParquetWriteSupport extends WriteSupport<RowMetaAndData> {
         return new PrimitiveType( rep, PrimitiveType.PrimitiveTypeName.DOUBLE, formatFieldName );
       case FLOAT:
         return new PrimitiveType( rep, PrimitiveType.PrimitiveTypeName.FLOAT, formatFieldName );
+      case INT_8:
+    	return new PrimitiveType( rep, PrimitiveType.PrimitiveTypeName.INT32, formatFieldName );  
       case INT_32:
         return new PrimitiveType( rep, PrimitiveType.PrimitiveTypeName.INT32, formatFieldName );
       case UTF8:
@@ -415,6 +431,11 @@ public class PentahoParquetWriteSupport extends WriteSupport<RowMetaAndData> {
         } else {
           return Types.required( PrimitiveType.PrimitiveTypeName.BINARY ).as( OriginalType.DECIMAL ).precision( f.getPrecision() ).scale( f.getScale() ).named( formatFieldName );
         }
+      case DECIMAL_FIXED_LEN_BYTE_ARRAY :
+		if (f.getAllowNull()) {
+		  return Types.optional(PrimitiveType.PrimitiveTypeName.FIXED_LEN_BYTE_ARRAY).length(getLength(f.getPrecision())).as(OriginalType.DECIMAL).precision(f.getPrecision()).scale(f.getScale()).named(formatFieldName);
+		}
+		  return Types.required(PrimitiveType.PrimitiveTypeName.FIXED_LEN_BYTE_ARRAY).length(getLength(f.getPrecision())).as(OriginalType.DECIMAL).precision(f.getPrecision()).scale(f.getScale()).named(formatFieldName);
       case DECIMAL_INT_32:
         if ( f.getAllowNull() ) {
           return Types.optional( PrimitiveType.PrimitiveTypeName.INT32 ).as( OriginalType.DECIMAL ).precision( f.getPrecision() ).scale( f.getScale() ).named( formatFieldName );
@@ -433,4 +454,87 @@ public class PentahoParquetWriteSupport extends WriteSupport<RowMetaAndData> {
         throw new RuntimeException( "Unsupported output type: " + f.getParquetType() );
     }
   }
+  
+  public Binary getBinaryValue(BigDecimal bigDecimal1, IParquetOutputField field) {
+		if (bigDecimal1 != null) {
+			bigDecimal1 = bigDecimal1.round(new MathContext(field.getPrecision(), RoundingMode.HALF_UP))
+					.setScale(field.getScale(), RoundingMode.HALF_UP);
+		}
+		byte[] byteArray = bigDecimal1.unscaledValue().toByteArray();
+
+		int precision = field.getPrecision();
+		precision = getLength(precision);
+		byte[] tgt = new byte[precision];
+		if (bigDecimal1.signum() == -1) {
+			for (int i = 0; i < precision; i++) {
+				int tmp89_87 = i;
+				byte[] tmp89_85 = tgt;
+				tmp89_85[tmp89_87] = ((byte) (tmp89_85[tmp89_87] | 0xFF));
+			}
+		}
+		System.arraycopy(byteArray, 0, tgt, precision - byteArray.length, byteArray.length);
+
+		return Binary.fromConstantByteArray(tgt);
+	}
+
+	public int getLength(int precision) {
+		switch (precision) {
+			case 1 :
+			case 2 :
+				return 1;
+			case 3 :
+			case 4 :
+				return 2;
+			case 5 :
+			case 6 :
+				return 3;
+			case 7 :
+			case 8 :
+			case 9 :
+				return 4;
+			case 10 :
+			case 11 :
+				return 5;
+			case 12 :
+			case 13 :
+			case 14 :
+				return 6;
+			case 15 :
+			case 16 :
+				return 7;
+			case 17 :
+			case 18 :
+				return 8;
+			case 19 :
+			case 20 :
+			case 21 :
+				return 9;
+			case 22 :
+			case 23 :
+				return 10;
+			case 24 :
+			case 25 :
+			case 26 :
+				return 11;
+			case 27 :
+			case 28 :
+				return 12;
+			case 29 :
+			case 30 :
+			case 31 :
+				return 13;
+			case 32 :
+			case 33 :
+				return 14;
+			case 34 :
+			case 35 :
+				return 15;
+			case 36 :
+			case 37 :
+			case 38 :
+				return 16;
+		}
+		return -1;
+	}
+
 }

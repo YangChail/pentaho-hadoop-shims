@@ -66,27 +66,27 @@ public class DriverInvocationHandler implements InvocationHandler {
    * @return the object returned by whatever processing takes place
    * @throws Throwable if an error occurs during processing
    */
-  @Override
   public Object invoke( final Object proxy, Method method, Object[] args ) throws Throwable {
 
-    try {
-      Object o = method.invoke( driver, args );
-      if ( o instanceof Connection ) {
-        // Intercept the Connection object so we can proxy that too
-        Connection proxiedConnection = (Connection) Proxy.newProxyInstance( o.getClass().getClassLoader(),
-          new Class[] { Connection.class }, new ConnectionInvocationHandler( (Connection) o ) );
+	    try {
+	      org.pentaho.hadoop.shim.common.KerberosAuth.hiveKerberosAuthLogin(method, args);
+	      Object o = method.invoke( driver, args );
+	      if ( o instanceof Connection ) {
+	        // Intercept the Connection object so we can proxy that too
+	        Connection proxiedConnection = (Connection) Proxy.newProxyInstance( o.getClass().getClassLoader(),
+	          new Class[] { Connection.class }, new ConnectionInvocationHandler( (Connection) o ) );
 
-        String dbName = HiveSQLUtils.getDatabaseNameFromURL( (String) args[ 0 ] );
-        useSchema( dbName, proxiedConnection.createStatement() );
+	        String dbName = HiveSQLUtils.getDatabaseNameFromURL( (String) args[ 0 ] );
+	        useSchema( dbName, proxiedConnection.createStatement() );
 
-        return proxiedConnection;
-      } else {
-        return o;
-      }
-    } catch ( Throwable t ) {
-      throw ( t instanceof InvocationTargetException ) ? t.getCause() : t;
-    }
-  }
+	        return proxiedConnection;
+	      } else {
+	        return o;
+	      }
+	    } catch ( Throwable t ) {
+	      throw ( t instanceof InvocationTargetException ) ? t.getCause() : t;
+	    }
+	  }
 
   protected static void useSchema( String dbName, Statement statement ) throws SQLException {
     if ( dbName.trim().length() > 0 ) {

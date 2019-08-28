@@ -89,7 +89,10 @@ public class HadoopShimImpl extends CommonHadoopShim {
     ClassLoader cl = Thread.currentThread().getContextClassLoader();
     Thread.currentThread().setContextClassLoader( getClass().getClassLoader() );
     try {
-      return new ConfigurationProxyV2();
+			ConfigurationProxyV2 configurationProxyV2 = new ConfigurationProxyV2();
+			// login
+			KerberosAuth.hadoopKerberosAuthLogin(configurationProxyV2);
+			return configurationProxyV2;
     } catch ( IOException e ) {
       throw new RuntimeException( "Unable to create configuration for new mapreduce api: ", e );
     } finally {

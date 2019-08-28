@@ -54,6 +54,7 @@ public class ConfigurationProxyV2 implements Configuration {
     job.getConfiguration().addResource( "hdfs-site.xml" );
     job.getConfiguration().addResource( "hive-site.xml" );
     job.getConfiguration().addResource( "hbase-site.xml" );
+    job.getConfiguration().addResource( "kerberos.xml" );
   }
 
   public JobConf getJobConf() {
