@@ -10,11 +10,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import javax.security.auth.Subject;
+import javax.security.auth.login.LoginContext;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.hadoop.security.UserGroupInformation.AuthenticationMethod;
 
 /**
  * kerberos auth
@@ -37,9 +41,10 @@ public class DataMaskingHadoopProxyUtils extends DataMaskingHadoopProxyUtilsPare
 	 * @param args
 	 * @throws Exception
 	 */
-	public   void hiveKerberosAuthLogin(Method method, Object[] args) throws Exception {
-		if (method.getName().equals("connect") && method.getParameterTypes().length == 2) {
+	public static synchronized void hiveKerberosAuthLogin(Method method, Object[] args) throws Exception {
+		if (method.getName().equals("connect")) {
 			String connectUrl = (String) args[0];
+			if(connectUrl.indexOf("principal=")>-1) {
 			Map<String, String> config = getConfFromWeb(connectUrl);
 			if (config != null) {
 				String pricipal = config.get(PRINCIPAL);
@@ -52,6 +57,7 @@ public class DataMaskingHadoopProxyUtils extends DataMaskingHadoopProxyUtilsPare
 				//getloginSubject(config.get(PRINCIPAL), config.get(KEYTAB), config.get(CONF));
 				System.setProperty("java.security.krb5.conf", config.get(CONF));
 				UserGroupInformation.loginUserFromKeytab(config.get(PRINCIPAL), config.get(KEYTAB));
+			}
 			}
 		}
 
@@ -92,20 +98,14 @@ public class DataMaskingHadoopProxyUtils extends DataMaskingHadoopProxyUtilsPare
 					}
 					System.setProperty("java.security.krb5.conf", config.get(CONF));
 					UserGroupInformation.loginUserFromKeytab(config.get(PRINCIPAL), config.get(KEYTAB));
-					//FileSystem.get(path, conf);
-					logger.info(key + " kerberos login success");
+					FileSystem.get(path, conf);
+					//logger.info(key + " kerberos login success");
 				} catch (Exception e) {
 					logger.error("kerberos login error", e);
 				}
 			}
 		}
 
-	}
-	
-	
-	
-	public UserGroupInformation loginCheckAndAddConfigReturnUGI(String path, Configuration conf) throws Exception {
-		return loginCheckAndAddConfigReturnUGI(new URI(path),conf);
 	}
 
 	/**
@@ -115,7 +115,7 @@ public class DataMaskingHadoopProxyUtils extends DataMaskingHadoopProxyUtilsPare
 	 * @param conf
 	 * @throws IOException 
 	 */
-	public UserGroupInformation loginCheckAndAddConfigReturnUGI(URI path, Configuration conf) throws Exception {
+	public UserGroupInformation loginCheckAndAddConfigReturnUGI(URI path, Configuration conf) throws IOException {
 		addConfig(path, conf);
 		String string = conf.get(CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION);
 		if (string != null && "KERBEROS".equalsIgnoreCase(string)) {
@@ -132,7 +132,7 @@ public class DataMaskingHadoopProxyUtils extends DataMaskingHadoopProxyUtilsPare
 					System.setProperty("java.security.krb5.conf", config.get(CONF));
 					UserGroupInformation ugi = UserGroupInformation
 							.loginUserFromKeytabAndReturnUGI(config.get(PRINCIPAL), config.get(KEYTAB));
-					logger.info(key + " kerberos login success");
+					//logger.info(key + " kerberos login success");
 					return ugi;
 				} catch (Exception e) {
 					logger.error("kerberos login error", e);
@@ -148,9 +148,10 @@ public class DataMaskingHadoopProxyUtils extends DataMaskingHadoopProxyUtilsPare
 	 * 
 	 * @param path
 	 * @param conf
-	 * @throws Exception 
+	 * @throws InterruptedException
+	 * @throws IOException
 	 */
-	public FileSystem getFileSystem(URI path, Configuration conf) throws Exception {
+	public FileSystem getFileSystem(URI path, Configuration conf) throws IOException, InterruptedException {
 		UserGroupInformation ugi = loginCheckAndAddConfigReturnUGI(path, conf);
 		if (ugi != null) {
 			FileSystem fs = ugi.doAs(new PrivilegedExceptionAction<FileSystem>() {
@@ -158,6 +159,7 @@ public class DataMaskingHadoopProxyUtils extends DataMaskingHadoopProxyUtilsPare
 					return FileSystem.get(path, conf);
 				}
 			});
+
 			return fs;
 		}
 		return FileSystem.get(path, conf);
@@ -176,16 +178,13 @@ public class DataMaskingHadoopProxyUtils extends DataMaskingHadoopProxyUtilsPare
 	public FileSystem getFileSystem(String path, Configuration conf) throws IOException, InterruptedException {
 		try {
 			return getFileSystem(new URI(path),conf);
-		} catch (Exception e) {
+		} catch (URISyntaxException e) {
 			e.printStackTrace();
 		}
 		return null;
 	}
 
-	public  Map<String, String> getConfFromWeb(String key) {
-		if(key==null||key.length()<1) {
-			return null;
-		}
+	public static Map<String, String> getConfFromWeb(String key) {
 		try {
 			Class<?> classs = Class.forName("com.mchz.service.impl.source.DataMaskingHadoopUtils");
 			if (classs != null) {
@@ -195,7 +194,7 @@ public class DataMaskingHadoopProxyUtils extends DataMaskingHadoopProxyUtilsPare
 							.invoke(null, null);
 					if (subject_MAP != null && subject_MAP.size() > 0) {
 						Map<String, String> conf = subject_MAP.get(key);
-						if (conf != null&&conf.size()>0) {
+						if (conf != null) {
 							return conf;
 						}
 					}
@@ -209,10 +208,7 @@ public class DataMaskingHadoopProxyUtils extends DataMaskingHadoopProxyUtilsPare
 		return null;
 	}
 
-	public  List<String> getConfFileFromWeb(String key) {
-		if(key==null||key.length()<1) {
-			return null;
-		}
+	public static List<String> getConfFileFromWeb(String key) {
 		try {
 			Class<?> classs = Class.forName("com.mchz.service.impl.source.DataMaskingHadoopUtils");
 			if (classs != null) {
@@ -222,7 +218,7 @@ public class DataMaskingHadoopProxyUtils extends DataMaskingHadoopProxyUtilsPare
 							.invoke(null, null);
 					if (subject_MAP != null && subject_MAP.size() > 0) {
 						List<String> conf = subject_MAP.get(key);
-						if (conf != null&&conf.size()>0) {
+						if (conf != null) {
 							return conf;
 						}
 					}
@@ -236,13 +232,12 @@ public class DataMaskingHadoopProxyUtils extends DataMaskingHadoopProxyUtilsPare
 		return null;
 	}
 
-	public  void addConfig(URI path, Configuration conf) {
+	public static void addConfig(URI path, Configuration conf) {
 		String authority = path.getAuthority();
 		List<String> confFileFromWeb = getConfFileFromWeb(authority);
 		if (confFileFromWeb != null && confFileFromWeb.size() > 0) {
 			for (String str : confFileFromWeb) {
 				if (conf.toString().indexOf(str) < 0) {
-					conf.setBoolean("ipc.client.fallback-to-simple-auth-allowed", true);
 					Path uri = new Path(str);
 					conf.addResource(uri);
 				}
