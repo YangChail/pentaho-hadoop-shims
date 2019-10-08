@@ -81,7 +81,6 @@ public class PentahoParquetInputFormat extends HadoopFormatBase implements IPent
       ConfigurationProxy conf = new ConfigurationProxy();
       job = Job.getInstance( conf );
       nativeParquetInputFormat = new ParquetInputFormat<>();
-
       ParquetInputFormat.setReadSupportClass( job, PentahoParquetReadSupport.class );
       ParquetInputFormat.setTaskSideMetaData( job, false );
     } );
@@ -168,24 +167,11 @@ public class PentahoParquetInputFormat extends HadoopFormatBase implements IPent
 	public List<IParquetInputField> readSchema(String file) throws Exception {
 		return inClassloader(() -> {
 			ConfigurationProxy conf = new ConfigurationProxy();
-			UserGroupInformation ugi = new DataMaskingHadoopProxyUtils().loginCheckAndAddConfigReturnUGI(file, conf);
-			List<Footer>footers =ugi.doAs(new PrivilegedAction<List<Footer>>() {
-				@Override
-				public List<Footer> run() {
-					List<Footer> footers=new ArrayList<>();
-					S3NCredentialUtils.applyS3CredentialsToHadoopConfigurationIfNecessary(file, conf);
-					Path filePath = new Path(S3NCredentialUtils.scrubFilePathIfNecessary(file));
-					FileSystem fs;
-					try {
-						fs = FileSystem.get(filePath.toUri(), conf);
-						FileStatus fileStatus = fs.getFileStatus(filePath);
-						footers = ParquetFileReader.readFooters(conf, fileStatus, true);
-					} catch (IOException e) {
-						e.printStackTrace();
-					}
-					return footers;
-				}
-			});
+			 Path filePath = new Path(S3NCredentialUtils.scrubFilePathIfNecessary(file));
+			 new DataMaskingHadoopProxyUtils().loginCheckAndAddConfig(filePath.getName(), job.getConfiguration());
+			 FileSystem fs = FileSystem.get(filePath.toUri(), conf);
+			 FileStatus fileStatus = fs.getFileStatus(filePath);
+			 List<Footer> footers = ParquetFileReader.readFooters(conf, fileStatus, true);
 			if (footers.isEmpty()) {
 				return new ArrayList<IParquetInputField>();
 			} else {
