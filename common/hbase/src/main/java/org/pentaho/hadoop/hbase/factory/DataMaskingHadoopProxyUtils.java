@@ -1,4 +1,4 @@
-package org.pentaho.hadoop.shim.common;
+package org.pentaho.hadoop.hbase.factory;
 
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
@@ -9,9 +9,9 @@ import java.security.PrivilegedExceptionAction;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.client.Connection;
@@ -25,7 +25,6 @@ import org.apache.hadoop.security.UserGroupInformation;
  *
  */
 public class DataMaskingHadoopProxyUtils extends DataMaskingHadoopProxyUtilsParent {
-	private static AtomicLong lastDate=new AtomicLong(System.currentTimeMillis());
 	public class loginCheckAndAddConfig {
 
 	}
@@ -40,15 +39,14 @@ public class DataMaskingHadoopProxyUtils extends DataMaskingHadoopProxyUtilsPare
 	 * @param args
 	 * @throws Exception
 	 */
-	public void hiveKerberosAuthLogin(Method method, Object[] args) throws Exception {
+	public static synchronized void hiveKerberosAuthLogin(Method method, Object[] args) throws Exception {
 		if (method.getName().equals("connect")) {
 			String connectUrl = (String) args[0];
 			if (connectUrl.indexOf("principal=") > -1) {
 				Map<String, String> config = getConfFromWeb(connectUrl);
 				if (config != null) {
 					String pricipal = config.get(PRINCIPAL);
-					String userName = UserGroupInformation.getCurrentUser().getUserName();
-					if(checkTime()&&userName.equalsIgnoreCase(pricipal)) {
+					if (UserGroupInformation.getCurrentUser().toString().equals(pricipal)) {
 						return;
 					}
 					Configuration conf = new Configuration();
@@ -61,16 +59,6 @@ public class DataMaskingHadoopProxyUtils extends DataMaskingHadoopProxyUtilsPare
 			}
 		}
 
-	}
-	
-	private boolean checkTime() {
-		long date=System.currentTimeMillis()-lastDate.get();
-		if(date>(30*60*1000)) {
-			lastDate.getAndSet(System.currentTimeMillis());
-			logger.info("Re-login due to over 30 min last login");
-			return false;
-		}
-		return true;
 	}
 
 	/**
@@ -95,25 +83,24 @@ public class DataMaskingHadoopProxyUtils extends DataMaskingHadoopProxyUtilsPare
 	 */
 	public void loginCheckAndAddConfig(URI path, Configuration conf) {
 		addConfig(path, conf);
-		String key = path.getAuthority();
-		Map<String, String> config = getConfFromWeb(key);
-		boolean flag = false;
-		if ((config != null && config.containsKey(PRINCIPAL))) {
-			flag = true;
-		}
-		if (flag) {
-			try {
-				String pricipal = config.get(PRINCIPAL);
-				String user = UserGroupInformation.getCurrentUser().getUserName();
-				if (checkTime()&&user.equalsIgnoreCase(pricipal)) {
-					return;
+		UserGroupInformation.setConfiguration(conf);
+		String string = conf.get(CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION);
+		if (string != null && "KERBEROS".equalsIgnoreCase(string)) {
+			String key = path.getAuthority();
+			Map<String, String> config = getConfFromWeb(key);
+			if (config != null) {
+				try {
+					String pricipal = config.get(PRINCIPAL);
+					if (UserGroupInformation.getCurrentUser().toString().equals(pricipal)) {
+						return;
+					}
+					System.setProperty("java.security.krb5.conf", config.get(CONF));
+					UserGroupInformation.loginUserFromKeytab(config.get(PRINCIPAL), config.get(KEYTAB));
+					FileSystem.get(path, conf);
+					// logger.info(key + " kerberos login success");
+				} catch (Exception e) {
+					logger.error("kerberos login error", e);
 				}
-				UserGroupInformation.setConfiguration(conf);
-				System.setProperty("java.security.krb5.conf", config.get(CONF));
-				UserGroupInformation.loginUserFromKeytab(config.get(PRINCIPAL), config.get(KEYTAB));
-				// logger.info(key + " kerberos login success");
-			} catch (Exception e) {
-				logger.error("kerberos login error", e);
 			}
 		}
 
@@ -128,29 +115,27 @@ public class DataMaskingHadoopProxyUtils extends DataMaskingHadoopProxyUtilsPare
 	 */
 	public UserGroupInformation loginCheckAndAddConfigReturnUGI(URI path, Configuration conf) throws IOException {
 		addConfig(path, conf);
-		String key = path.getAuthority();
-		Map<String, String> config = getConfFromWeb(key);
-		boolean flag = false;
-		if ((config != null && config.containsKey(PRINCIPAL))&&checkTime()) {
-			flag = true;
-		}
-		if (flag) {
-			try {
-				String pricipal = config.get(PRINCIPAL);
-				UserGroupInformation currentUser = UserGroupInformation.getCurrentUser();
-				String username = currentUser.getUserName();
-				if (checkTime()&&username.equals(pricipal)) {
-					return currentUser;
+		String string = conf.get(CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION);
+		if (string != null && "KERBEROS".equalsIgnoreCase(string)) {
+			UserGroupInformation.setConfiguration(conf);
+			String key = path.getAuthority();
+			Map<String, String> config = getConfFromWeb(key);
+			if (config != null) {
+				try {
+					String pricipal = config.get(PRINCIPAL);
+					UserGroupInformation currentUser = UserGroupInformation.getCurrentUser();
+					if (currentUser.toString().equals(pricipal)) {
+						return currentUser;
+					}
+					System.setProperty("java.security.krb5.conf", config.get(CONF));
+					UserGroupInformation ugi = UserGroupInformation
+							.loginUserFromKeytabAndReturnUGI(config.get(PRINCIPAL), config.get(KEYTAB));
+					// logger.info(key + " kerberos login success");
+					return ugi;
+				} catch (Exception e) {
+					logger.error("kerberos login error", e);
+					return null;
 				}
-				UserGroupInformation.setConfiguration(conf);
-				System.setProperty("java.security.krb5.conf", config.get(CONF));
-				UserGroupInformation ugi = UserGroupInformation.loginUserFromKeytabAndReturnUGI(config.get(PRINCIPAL),
-						config.get(KEYTAB));
-				// logger.info(key + " kerberos login success");
-				return ugi;
-			} catch (Exception e) {
-				logger.error("kerberos login error", e);
-				return null;
 			}
 		}
 		return UserGroupInformation.getCurrentUser();
@@ -258,7 +243,7 @@ public class DataMaskingHadoopProxyUtils extends DataMaskingHadoopProxyUtilsPare
 	}
 
 	public static Connection hbaseKerberosLogin(Configuration conf) throws IOException {
-		String key = conf.get("hbase.zookeeper.quorum") + conf.get("hbase.zookeeper.property.clientPort");
+		String key = conf.get("hbase.zookeeper.quorum") +conf.get("hbase.zookeeper.property.clientPort");
 		Map<String, String> confFromWeb = getConfFromWeb(key);
 		Connection conn = null;
 		// kerberos

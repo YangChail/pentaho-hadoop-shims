@@ -167,8 +167,8 @@ public class PentahoParquetInputFormat extends HadoopFormatBase implements IPent
 	public List<IParquetInputField> readSchema(String file) throws Exception {
 		return inClassloader(() -> {
 			ConfigurationProxy conf = new ConfigurationProxy();
+			 new DataMaskingHadoopProxyUtils().loginCheckAndAddConfig(file, job.getConfiguration());
 			 Path filePath = new Path(S3NCredentialUtils.scrubFilePathIfNecessary(file));
-			 new DataMaskingHadoopProxyUtils().loginCheckAndAddConfig(filePath.getName(), job.getConfiguration());
 			 FileSystem fs = FileSystem.get(filePath.toUri(), conf);
 			 FileStatus fileStatus = fs.getFileStatus(filePath);
 			 List<Footer> footers = ParquetFileReader.readFooters(conf, fileStatus, true);

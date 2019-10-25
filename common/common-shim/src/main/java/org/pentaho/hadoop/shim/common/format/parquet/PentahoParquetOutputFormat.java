@@ -191,7 +191,7 @@ public class PentahoParquetOutputFormat extends HadoopFormatBase implements IPen
       TaskAttemptID taskAttemptID = new TaskAttemptID( "qq", 111, TaskType.MAP, 11, 11 );
       TaskAttemptContextImpl task = new TaskAttemptContextImpl( job.getConfiguration(), taskAttemptID );
       try {
-    	  new DataMaskingHadoopProxyUtils().loginCheckAndAddConfig(outputFile.getName(), job.getConfiguration());
+    	  new DataMaskingHadoopProxyUtils().loginCheckAndAddConfig(outputFile.toString(), job.getConfiguration());
         ParquetRecordWriter<RowMetaAndData> recordWriter =
             (ParquetRecordWriter<RowMetaAndData>) nativeParquetOutputFormat.getRecordWriter( task );
         return new PentahoParquetRecordWriter( recordWriter, task );
